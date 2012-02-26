@@ -116,11 +116,11 @@ class GHMM:
 
         RETURNS
         -------
-        lnP_seq: ln probability of q*
-        qstar {Nx1}: labels/indices of states in q*
+        pstar: ln probability of q*
+        qstar {Nx1}: labels/indices of states in q* (normal python array of len N)
         '''
 
-        Nobs, D = O.shape
+        T, D = O.shape
 
         # check dimensions of provided observations agree with the trained emission distributions
         dim = self._B[0].mu.shape[1]
@@ -128,6 +128,38 @@ class GHMM:
             raise ValueError('GHMM: observation dimension does not agree with the trained emission distributions for the model')
 
         # calculate lnP for each observation for each state's emission distribution
-        # lnP_obs {Nobs, N}
+        # lnP_obs {T, N}
+        lnP_obs = np.zeros((T,N))
         for i in range(0,N):
-            
+            lnP_obs[:,i] = B[i].calcLnP(O)
+
+        # lnDelta {TxN}: best score along a single path, at time t, accounting for the first t observations and ending in state Si
+        lnDelta = np.zeros((T,N))
+        # lnPsi {TxN}: arg max of best scores for each t and j state
+        lnPsi = np.zeros((T,N), dtype=np.int)
+
+        # Step 1: initialization
+        lnDelta[0,:] = np.log(self._pi) + lnP_obs[0,:]
+
+        # Step 2: recursion
+        for t in range(1:T):
+            pTrans = lnDelta[[t-1],:].T + np.log(self._A)
+            lnDelta[t,:] = np.max(pTrans, axis=0) + lnP_obs[t,:]
+            lnPsi[t,:] = np.argmax(pTrans, axis=0)
+
+        # Step 3: termination
+        qstar_t = np.argmax(lnDelta[-1,:])
+        pstar = lnDelta[-1,qstar_T]
+
+        qstar = []
+        for t in reversed(range(0,T)):
+            qstar.append(qstar_t)
+            qstar_t = lnPsi[t,qstar_t]
+
+        qstar.reverse()
+
+        # return labels
+        if (labels):
+            qstar = [self._labels[q] for q in qstar]
+
+        return pstar, qstar
