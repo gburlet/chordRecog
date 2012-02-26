@@ -145,7 +145,7 @@ class GHMM:
         lnDelta[0,:] = np.log(self._pi) + lnP_obs[0,:]
 
         # Step 2: recursion
-        for t in range(1:T):
+        for t in range(1,T):
             pTrans = lnDelta[[t-1],:].T + np.log(self._A)
             lnDelta[t,:] = np.max(pTrans, axis=0) + lnP_obs[t,:]
             lnPsi[t,:] = np.argmax(pTrans, axis=0)
