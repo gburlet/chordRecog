@@ -111,13 +111,13 @@ class GHMM:
 
         PARAMETERS
         ----------
-        O {NxD}: observation matrix with a sequence of N observations, each having dimension D
+        O {TxD}: observation matrix with a sequence of T observations, each having dimension D
         labels: whether to return the state labels, or the state indices
 
         RETURNS
         -------
         pstar: ln probability of q*
-        qstar {Nx1}: labels/indices of states in q* (normal python array of len N)
+        qstar {Tx1}: labels/indices of states in q* (normal python array of len T)
         '''
 
         T, D = O.shape
