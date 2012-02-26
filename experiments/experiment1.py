@@ -21,14 +21,11 @@ covType = 'full'
 addOne = True
 
 # learn HMM model lambda = (pi, A, B) from ground truth
-pi, A, B, labels = learnHMM(M, addOne, covType)
+pi, A, B, labels, Xtest, ytest = learnHMM(M, addOne, covType)
 
 N = A.shape[0]
 
 # fill the HMM with the learned parameters
 hmm = GHMM(N, labels = labels, pi = pi, A = A, B = B)
 
-# get Obs
-
 # find optimal state sequence
-# TODO: viterbi
