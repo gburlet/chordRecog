@@ -57,7 +57,10 @@ class GHMM:
         return self._labels
 
     def _setLabels(self, theLabels):
-        pass
+        if len(theLabels) != self.N:
+            raise ValueError('GHMM: invalid number of state labels')
+
+        self._labels = theLabels.copy()
 
     labels = property(_getLabels, _setLabels)
 
