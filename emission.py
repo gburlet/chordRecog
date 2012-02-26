@@ -239,7 +239,8 @@ class GMM:
                     # U*U.T = _Sigma[l,:,:]
                     U = linalg.cholesky(self._Sigma[l,:,:], lower=True)
                 except linalg.LinAlgError:
-                    print "Sigma is not positive definite. Reinitializing ..."
+                    if verbose:
+                        print "Sigma is not positive definite. Reinitializing ..."
                     self._Sigma[l,:,:] = 1e-6 * np.eye(self.D)
                     U = 1000.0 * self._Sigma[l,:,:]
                     
@@ -278,11 +279,11 @@ class GMM:
         N, _ = X.shape
         w = posteriors.sum(axis=0)
 
-        if 'w' in update:
-            self._lnw = np.log(w / N)
-
         # zero correction, avoid divide by zero
         w[w == 0.0] += self._zeroCorr
+
+        if 'w' in update:
+            self._lnw = np.log(w / N)
 
         if 'm' in update:
             self._mu = np.dot(posteriors.T, X) / w[:, np.newaxis]
