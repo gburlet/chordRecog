@@ -1,0 +1,6 @@
+# Compiled source #
+###################
+*.pyc
+
+# Vim swap files
+*.swp
