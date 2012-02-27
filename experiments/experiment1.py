@@ -29,3 +29,4 @@ N = A.shape[0]
 hmm = GHMM(N, labels = labels, pi = pi, A = A, B = B)
 
 # find optimal state sequence
+pstar, qstar = hmm.viterbi(Xtest)

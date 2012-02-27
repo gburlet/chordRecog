@@ -60,7 +60,7 @@ class GHMM:
         if len(theLabels) != self.N:
             raise ValueError('GHMM: invalid number of state labels')
 
-        self._labels = theLabels.copy()
+        self._labels = theLabels
 
     labels = property(_getLabels, _setLabels)
 
@@ -99,7 +99,7 @@ class GHMM:
         if any(not isinstance(emis, GMM) for emis in theB): 
             raise ValueError('GHMM: B elements must be of class emission.GMM')
         
-        self._B = theB.copy()
+        self._B = theB
 
     B = property(_getB, _setB)
 
@@ -132,14 +132,14 @@ class GHMM:
 
         # calculate lnP for each observation for each state's emission distribution
         # lnP_obs {T, N}
-        lnP_obs = np.zeros((T,N))
-        for i in range(0,N):
-            lnP_obs[:,i] = B[i].calcLnP(O)
+        lnP_obs = np.zeros((T,self.N))
+        for i in range(0,self.N):
+            lnP_obs[:,i] = self._B[i].calcLnP(O)
 
         # lnDelta {TxN}: best score along a single path, at time t, accounting for the first t observations and ending in state Si
-        lnDelta = np.zeros((T,N))
+        lnDelta = np.zeros((T,self.N))
         # lnPsi {TxN}: arg max of best scores for each t and j state
-        lnPsi = np.zeros((T,N), dtype=np.int)
+        lnPsi = np.zeros((T,self.N), dtype=np.int)
 
         # Step 1: initialization
         lnDelta[0,:] = np.log(self._pi) + lnP_obs[0,:]
@@ -152,7 +152,7 @@ class GHMM:
 
         # Step 3: termination
         qstar_t = np.argmax(lnDelta[-1,:])
-        pstar = lnDelta[-1,qstar_T]
+        pstar = lnDelta[-1,qstar_t]
 
         qstar = []
         for t in reversed(range(0,T)):
