@@ -1,5 +1,6 @@
 import numpy as np
-from scipy import linalg
+from scipy import linalg as slinalg
+from numpy import linalg as nlinalg
 
 # for mean initialization
 from sklearn import cluster
@@ -54,13 +55,14 @@ class GMM:
         if "Sigma" in kwargs:
             self._setSigma(kwargs["Sigma"])
         else:
-            self._setSigma(np.eye(self.D))
-            
-
+            self._setSigma(np.tile(np.eye(self.D), (self.M, 1, 1)))
+        
         if "w" in kwargs:
             self._setW(kwargs["w"])
         else:
-            self._setW(np.tile(1.0 / self.M, self.M))
+            #self._setW(np.tile(1.0 / self.M, self.M))
+            wRand = np.random.rand(self.M)
+            self._setW(wRand / np.sum(wRand))
 
     ''' 
     CLASS PROPERTIES
@@ -101,7 +103,7 @@ class GMM:
         '''
         Setter function for Sigma
         '''
-        if theSigma.shape != (self.M, self.D, self.D) and theSigma.shape != (self.D, self.D):
+        if theSigma.shape != (self.M, self.D, self.D):
             raise ValueError('GMM: invalid Sigma matrix dimensions')
 
         self._Sigma = self._processCov(theSigma).copy()
@@ -149,15 +151,22 @@ class GMM:
         lnP_history: learning curve
         '''
 
+        # debug: save training data
+        self.X = X
+
         N, dim = X.shape
         if dim != self.D:
             raise ValueError('GMM: training data dimensions not compatible with GMM')
 
+        if 'm' in init or 'c' in init:
+            if N >= self.M:
+                # k-means requires more observations than means to run
+                clusters = cluster.KMeans(k = self.M).fit(X)
+
         # initialize distribution parameters
         if 'm' in init:
             if N >= self.M:
-                # k-means requires more observations than means to run
-                self._setMu(cluster.KMeans(k = self.M).fit(X).cluster_centers_)
+                self._setMu(clusters.cluster_centers_)
             else:
                 # set means randomly from data
                 iRandObs = np.random.randint(N, size=(self.M, self.D))
@@ -165,18 +174,55 @@ class GMM:
                 self._setMu(X[iRandObs, iCol])
 
         if 'c' in init:
-            # if more than one observation reinitialize with covariance of data
-            # otherwise, stick with identity
-            if N > 1:
+            # if more than one observation and not enough for kmeans, reinitialize with covariance of data
+            if N > 1 and N < self.M:
                 # each row represents a variable, each column an observation
                 cov = np.cov(X.T)
-            
+                
                 # corner case: for univariate gaussian, turn into array
                 if self.D == 1:
                     cov = np.asarray([[cov]])
 
-                self._setSigma(cov)
+                # add constant along diagonal to rank-deficient covariance matrices
+                # taken from GMM library netlab3.3 (matlab code)
+                # GMM_WIDTH = 1.0 is arbitrary
+                if nlinalg.matrix_rank(cov) < self.D:
+                    cov += 1.0 * np.eye(self.D)
 
+                self._setSigma(np.tile(cov, (self.M, 1, 1)))
+
+            elif N >= self.M:
+                # get cluster labels for training data
+                labels = np.asarray(clusters.labels_, dtype = np.int)
+
+                cov = np.zeros([self.M, self.D, self.D])
+
+                # for each cluster
+                for l in range(0,self.M):
+                    # Pick out data points belonging to this centre
+                    c = X[labels == l]
+
+                    if len(c) > 0:
+                        diffs = c - self._mu[l,:]
+                        cov[l,:,:] = np.dot(diffs.T, diffs) / len(c)
+                    else:
+                        # at this point self.M number of mixtures is probably too complex a model for the data
+                        # continue anyways
+                        # each row represents a variable, each column an observation
+                        cov[l,:,:] = np.cov(X.T)
+                        
+                        # corner case: for univariate gaussian, turn into array
+                        if self.D == 1:
+                            cov = np.asarray([[cov]])
+
+                    # add constant along diagonal to rank-deficient covariance matrices
+                    # taken from GMM library netlab3.3 (matlab code)
+                    # GMM_WIDTH = 1.0 is arbitrary
+                    if nlinalg.matrix_rank(cov[l,:,:]) < self.D:
+                        cov[l,:,:] += 1.0 * np.eye(self.D)
+
+                self._setSigma(cov)
+                            
         # Expectation Maximization
         lnP_history = []
         for i in range(maxIter):
@@ -237,14 +283,15 @@ class GMM:
             elif self.covType == 'full':
                 try:
                     # U*U.T = _Sigma[l,:,:]
-                    U = linalg.cholesky(self._Sigma[l,:,:], lower=True)
-                except linalg.LinAlgError:
+                    U = slinalg.cholesky(self._Sigma[l,:,:], lower=True)
+                except slinalg.LinAlgError:
+                    # reinitialization trick is from scikit learn GMM
                     if verbose:
                         print "Sigma is not positive definite. Reinitializing ..."
                     self._Sigma[l,:,:] = 1e-6 * np.eye(self.D)
                     U = 1000.0 * self._Sigma[l,:,:]
                     
-                Q = linalg.solve_triangular(U, X_mu.T, lower=True)
+                Q = slinalg.solve_triangular(U, X_mu.T, lower=True)
                 lnP_Xi_l[:,l] = -0.5 * (self.D * np.log(2.0 * np.pi) + 2.0 * np.sum(np.log(np.diag(U))) + np.sum(Q ** 2, axis=0))
 
         lnP_Xi_l += self._lnw
@@ -293,8 +340,8 @@ class GMM:
             for l in range(0,self.M):
                 X_mu = X - self._mu[l,:]
                 self._Sigma[l,:,:] = np.dot(X_mu.T, posteriors[:,[l]] * X_mu) / w[l]
-                # add a prior for numerical stability
-                self._Sigma[l,:,:] += np.eye(self.D)*(1e-6)
+                # add a prior for numerical stability, used in many matlab EM libraries
+                self._Sigma[l,:,:] += np.eye(self.D)*(1e-2)
             
     def calcLnP(self, X):
         '''
@@ -323,8 +370,6 @@ class GMM:
 
         PARAMETERS
         ----------
-        Cov {DxD} The covariance matrix to process (stack)
-            or
         Cov {MxDxD}
 
         RETURNS
@@ -333,14 +378,8 @@ class GMM:
         '''
 
         if self.covType == 'full':
-            if Cov.shape == (self.D, self.D):
-                Cprime = np.tile(Cov, (self.M, 1, 1))
-            else:
-                Cprime = Cov
+            Cprime = Cov
         elif self.covType == 'diag':
-            if Cov.shape == (self.D, self.D):
-                Cprime = np.tile(Cov * np.eye(self.D), (self.M, 1, 1))
-            else:
-                Cprime = Cov * np.eye(self.D)
+            Cprime = Cov * np.eye(self.D)
 
         return Cprime

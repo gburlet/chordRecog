@@ -131,8 +131,8 @@ def learnHMM(M, addOne = True, features = 't', covType = 'full', leaveOneOut = 3
         # fill B
         if q in bDict:
             print "learning emissions for chord: %s, index: %d, #obs: %d" % (q, i, bDict[q].shape[0])
-            bGMM = GMM(M, 12, covType, zeroCorr=0.01, convEps=1e-6)
-            bGMM.expectMax(bDict[q], maxIter=100)
+            bGMM = GMM(M, 12, covType)
+            bGMM.expectMax(bDict[q], maxIter=100, convEps=1e-6)
             B.append(bGMM)
             
         i += 1
