@@ -136,8 +136,7 @@ def learnHMM(M, addOne = True, features = 't', featureNorm = 'L1', covType = 'fu
     B = []
 
     # for each state
-    i = 0
-    for q in QLabels:
+    for i, q in enumerate(QLabels):
         # fill pi
         if q in piDict:
             pi[0,i] = piDict[q]
@@ -145,8 +144,7 @@ def learnHMM(M, addOne = True, features = 't', featureNorm = 'L1', covType = 'fu
         # fill A
         if q in aDict:
             # traverse edges
-            j = 0
-            for k in QLabels:
+            for j, k in enumerate(QLabels):
                 if k in aDict[q]:
                     A[i,j] = aDict[q][k]
                 j += 1
