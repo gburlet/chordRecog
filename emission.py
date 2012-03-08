@@ -230,6 +230,9 @@ class GMM:
             lnP, posteriors = self._expect(X, verbose)
             lnP_history.append(lnP.sum())
 
+            if verbose:
+                print "EM iteration %d, lnP = %f" % (i, lnP_history[-1])
+
             if i > 0 and abs(lnP_history[-1] - lnP_history[-2]) < convEps:
                 # if little improvement, stop training
                 break
@@ -237,15 +240,15 @@ class GMM:
             # Maximization Step
             self._maximize(X, posteriors, update)
 
-            if verbose:
-                print "EM iteration %d, lnP = %f" % (i, lnP_history[-1])
-
         # only keep covariance diagonals
         if self.covType == 'diag':
             self._Sigma *= np.eye(self.D)
 
         if verbose:
-            print "EM converged in %d steps" % len(lnP_history)
+            if i < maxIter-1:
+                print "EM converged in %d steps" % len(lnP_history)
+            else:
+                print "EM did not converge (maxIter reached)"
 
         return lnP_history
 
@@ -300,10 +303,11 @@ class GMM:
         # divide by max to avoid underflow
         maxP = lnP_Xi_l.max(axis=1)[:,np.newaxis]
 
-
         lnP = np.log(np.sum(np.exp(lnP_Xi_l - maxP), axis=1)) + maxP.T
         # for floating point errors ... there's nothing else we can do here
         # replace NaN or inf with the max lnP
+        # taken from Matlab GMM EM library: 
+        # http://www.mathworks.com/matlabcentral/fileexchange/26184-em-algorithm-for-gaussian-mixture-model
         errInd = ~np.isfinite(lnP)
         lnP[errInd] = maxP.T[errInd]
 

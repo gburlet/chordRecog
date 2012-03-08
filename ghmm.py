@@ -150,6 +150,8 @@ class GHMM:
             lnDelta[t,:] = np.max(pTrans, axis=0) + lnP_obs[t,:]
             lnPsi[t,:] = np.argmax(pTrans, axis=0)
 
+        lnDelta[lnDelta <= -1e200] = -np.Inf
+
         # Step 3: termination
         qstar_t = np.argmax(lnDelta[-1,:])
         pstar = lnDelta[-1,qstar_t]
@@ -164,5 +166,5 @@ class GHMM:
         # return labels
         if (labels):
             qstar = [self._labels[q] for q in qstar]
-
+        
         return pstar, qstar

@@ -2,13 +2,14 @@ import os
 import numpy as np
 from emission import *
 
-def learnHMM(M, addOne = True, features = 't', covType = 'full', leaveOneOut = 3):
+def learnHMM(M, addOne = True, features = 't', featureNorm = 'L1', covType = 'full', leaveOneOut = 3, obsThresh = 0):
     '''
     PARAMETERS
     ----------
     M: number of gaussians to mix for emission probabilities
     addOne: whether one should be added to the transition matrices before normalization
     features: treble chroma 't' or bass chroma 'b' or both
+    featureNorm: L1, L2, Linf, or none normalization
     covType: type of the covariance matrix for the GMM emission distribution
              'diag', 'full'
     leaveOneOut: songID to leave out of the training phase and save for model validation
@@ -27,6 +28,11 @@ def learnHMM(M, addOne = True, features = 't', covType = 'full', leaveOneOut = 3
     aDict = {}
     bDict = {}
     QLabels = set()
+
+    if features == 'tb':
+        D = 24
+    else:
+        D = 12
 
     pSid = -1
     numSongs = 0;
@@ -47,12 +53,24 @@ def learnHMM(M, addOne = True, features = 't', covType = 'full', leaveOneOut = 3
         sid = int(obs[0])
 
         if features == 't':
-            chroma = np.asarray(obs[2:14], dtype=np.float)[np.newaxis,:]
+            chroma = np.asfarray(obs[2:14])[np.newaxis,:]
         elif features == 'b':
-            chroma = np.asarray(obs[14:26], dtype=np.float)[np.newaxis,:]
+            chroma = np.asfarray(obs[14:26])[np.newaxis,:]
         elif features == 'tb':
-            chroma = np.asarray(obs[2:26], dtype=np.float)[np.newaxis,:]
-            
+            chroma = np.asfarray(obs[2:26])[np.newaxis,:]
+
+        # skip silence (really there are no chords in either the treble or bass)            
+        if np.sum(chroma) == 0:
+            continue
+
+        # perform feature normalization
+        if featureNorm == 'L1':
+            chroma /= np.sum(np.abs(chroma))
+        elif featureNorm == 'L2':
+            chroma /= np.sum(chroma ** 2)
+        elif featureNorm == 'Linf':
+            chroma /= np.max(np.abs(chroma))
+
         simpleQuality = obs[35].strip()
         if simpleQuality != "NA":
             # use simple quality if available
@@ -76,6 +94,7 @@ def learnHMM(M, addOne = True, features = 't', covType = 'full', leaveOneOut = 3
                 pSid = sid
                 pChordName = chordName
                 numSongs += 1
+                obsNum += 1
             else:
                 #update A
                 if pChordName in aDict:
@@ -105,6 +124,10 @@ def learnHMM(M, addOne = True, features = 't', covType = 'full', leaveOneOut = 3
             ytest.append(chordName)
     
     QLabels = sorted(QLabels)
+    
+    # prune states with insufficient observations
+    QLabels = [q for q in QLabels if len(bDict[q]) >= obsThresh]
+
     N = len(QLabels)
 
     # initialize arrays
@@ -129,11 +152,10 @@ def learnHMM(M, addOne = True, features = 't', covType = 'full', leaveOneOut = 3
                 j += 1
         
         # fill B
-        if q in bDict:
-            print "learning emissions for chord: %s, index: %d, #obs: %d" % (q, i, bDict[q].shape[0])
-            bGMM = GMM(M, 12, covType)
-            bGMM.expectMax(bDict[q], maxIter=100, convEps=1e-6)
-            B.append(bGMM)
+        print "learning emissions for chord: %s, index: %d, #obs: %d" % (q, i, bDict[q].shape[0])
+        bGMM = GMM(M, D, covType, zeroCorr=1e-12)
+        bGMM.expectMax(bDict[q], maxIter=50, convEps=1e-6, verbose=True)
+        B.append(bGMM)
             
         i += 1
 
@@ -150,4 +172,4 @@ def learnHMM(M, addOne = True, features = 't', covType = 'full', leaveOneOut = 3
 
     return pi, A, B, QLabels, Xtest, ytest
 
-#pi, A, B, labels, Xtest, ytest = learnHMM(3, covType='diag')
+#pi, A, B, labels, Xtest, ytest = learnHMM(3, covType='full', features = 'tb', featureNorm = 'L1', leaveOneOut = 3, obsThresh=1250)
