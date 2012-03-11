@@ -1,3 +1,5 @@
+import numpy as np
+
 '''
 Error functions
 '''
@@ -8,7 +10,7 @@ class SSE:
     '''
 
     def __call__(self, output, target):
-        return 0.5 * np.sum((target - output) ** 2)
+        return 0.5 * np.sum((output - target) ** 2)
 
-    def derivative(self, err):
-        return err
+    def derivative(self, output, target):
+        return output - target
