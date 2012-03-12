@@ -14,8 +14,7 @@ class Sigmoid:
         return 1.0 / (1.0 + np.exp(-a))
 
     def derivative(self, x):
-        exp_x = np.exp(x)
-        return exp_x / ((1.0 + exp_x) ** 2)
+        return self(x) * (1.0 - self(x))
 
 class ArcTan:
     '''
@@ -27,7 +26,7 @@ class ArcTan:
         return np.tanh(a)
 
     def derivative(self, x):
-        return 1.0 - (np.tanh(x) ** 2)
+        return 1.0 - (self(x) ** 2)
 
 class Identity:
     '''
@@ -39,4 +38,4 @@ class Identity:
         return a
 
     def derivative(self, x):
-        np.ones_like(x)
+        return np.ones_like(x)

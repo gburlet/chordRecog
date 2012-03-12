@@ -82,7 +82,7 @@ class NeuralNet():
         w = np.empty(self._numWeights())
         wInd = 0
         for l in self.layers:
-            w[wInd:wInd+l.size] = l.w.flatten()
+            w[wInd:wInd+l.w.size] = l.w.flatten()
             wInd += l.w.size
 
         return w
@@ -113,7 +113,7 @@ class NeuralNet():
 
         wInd = 0
         for l in self.layers:
-            l.w = w[wInd:wInd+l.size].reshape(l.w.shape)
+            l.w = w[wInd:wInd+l.w.size].reshape(l.w.shape)
             wInd += l.w.size
 
     def _numWeights(self):
@@ -136,9 +136,9 @@ class NeuralNet():
         args:
             method: 'bfgs'
             errorFunc: error function
-            maxIter {int}: maximum number of training iterations, 500 default
+            maxiter {int}: maximum number of training iterations, 500 default
             gtol {float}: gradient the norm must be less than before succesful termination
-            verbose {boolean}: false default
+            show {int}: number of iterations to pass before printing status
         '''
         # set error function
         if "errorFunc" in args:
@@ -146,24 +146,12 @@ class NeuralNet():
         else:
             errorFunc = error.SSE()
 
-        # set parameters
-        options = {}
-        if "maxIter" in args:
-            options["maxiter"] = args["maxIter"]
-        else:
-            options["maxiter"] = 500
-
-        if "verbose" in args:
-            options["disp"] = args["verbose"]
-        else:
-            options["disp"] = False
-
         if "method" in args:
             method = args["method"]
         else:
             method = "bfgs"
 
-        trainer = Trainer(self, Xtrain, Ytrain, errorFunc, options)
+        trainer = Trainer(self, Xtrain, Ytrain, errorFunc, **args)
 
         if method == "bfgs":
             return trainer.trainBFGS()
@@ -175,7 +163,7 @@ class Layer():
     Creates a single perceptron layer of a feedforward neural network
     '''
 
-    def __init__(self, D, M, actFunc = act.Sigmoid()):
+    def __init__(self, D, M, actFunc):
         '''
         Creates a layer object
 
@@ -189,8 +177,10 @@ class Layer():
         self.M = M
 
         # randomize weights within the range of the activation function
-        min = actFunc.outputMinMax[0] / (2.0 * M)
-        max = actFunc.outputMinMax[1] / (2.0 * M)
+        #min = actFunc.outputMinMax[0] / (2.0 * M)
+        #max = actFunc.outputMinMax[1] / (2.0 * M)
+        min = -1.0
+        max = 1.0
         # absorb bias parameters into the weight parameters by defining an 
         # additional input variable Xo = 1
         self.w = np.random.uniform(min, max, [M,D+1])
@@ -207,7 +197,7 @@ class Layer():
 
     def calcOutput(self, input):
         self.input[1:] = input
-        self.a = np.dot(self.w, self.input[:,np.newaxis]).squeeze()
+        self.a = np.sum(self.w * self.input, axis=1)
         return self.actFunc(self.a)
 
 class Trainer():
@@ -215,14 +205,28 @@ class Trainer():
     Trainer for the neural network.
     '''
 
-    def __init__(self, net, Xtrain, Ytrain, errorFunc, options):
+    def __init__(self, net, Xtrain, Ytrain, errorFunc, **args):
         self._net = net
         self.train = Xtrain
         self.target = Ytrain
         self._errorFunc = errorFunc
-        self._options = options
         self._err = 0.0
         self._iter = 0
+        self._optArgs = {}
+
+        if "show" in args:
+            self._show = args["show"]
+        else:
+            self._show = 0
+
+        # options for the optimization algorithm
+        if "maxiter" in args:
+            self._optArgs["maxiter"] = args["maxiter"]
+        else:
+            self._optArgs["maxiter"] = 250
+
+        if "gtol" in args:
+            self._optArgs["gtol"] = args["gtol"]
 
         # keep track of error for plotting
         self.errHistory = []
@@ -266,6 +270,7 @@ class Trainer():
         delta: vector with length equal to the number of weights in the network. 
                Each element is d(E)/d(w_ji) = d(E)/d(a_j) * d(a_j)/d(w_ji)
         '''
+
         # update network weights
         self._w[:] = w
 
@@ -277,32 +282,30 @@ class Trainer():
             # outPoint {1xK}
             outPoint = self._net.calcOutput(inPoint[np.newaxis,:])
 
-            jInd = 0
+            jInd = w.size
             # calculate delta at the output neurons
-            delta = self._errorFunc.derivative(outPoint, targPoint).T
-            
+            lLayer = self._net.layers[-1]
+            delta = self._errorFunc.derivative(outPoint, targPoint)
+            delta = delta.T
             for lInd in reversed(range(self._net.N)):
                 l = self._net.layers[lInd]
                 numW = l.w.size
 
-                #print "delta: ", delta.shape
-                #print "grad: ", np.dot(delta, l.input[np.newaxis,:]).shape
-                #print "shape w: ", l.w.shape, "size: ", l.w.size
-
                 # calculate partial error gradients for weights feeding into this layer
                 # here input refers to the output of the previous layer (including activation)
-                jacob[jInd:jInd+numW] += np.dot(delta, l.input[np.newaxis,:]).flatten()
+                jacob[jInd-numW:jInd] += np.dot(delta, l.input[np.newaxis,:]).flatten()
 
                 # calculate deltas for previous layer
                 # (do not include delta for bias, since that isn't backed up)
                 if lInd > 0:
-                    a = self._net.layers[lInd-1].a[:,np.newaxis]
-                    delta = (np.dot(l.w.T[1:,:], delta) * l.actFunc.derivative(a))
+                    lPrev = self._net.layers[lInd-1]
+                    a = lPrev.a[:,np.newaxis]
+                    delta = np.dot(l.w.T[1:,:], delta) * lPrev.actFunc.derivative(a)
 
-                jInd += numW
+                jInd -= numW
 
-        return jacob           
-        
+        return jacob
+                
     def _optCallback(self, w):
         '''
         Called after each iteration of optimization, as _optCallback(w), where w is the current parameter vector.
@@ -311,14 +314,15 @@ class Trainer():
         ----------
         w: flattened vector of network weights at a given iteration
         '''
-        # later, can exit optimization when some satisfactory error level is reached -> raise exception then catch
-        print "Iteration ", self._iter, "; error: ", self._err
+        if self._iter % self._show == 0:
+            print "Iteration ", self._iter, "; error: ", self._err
+    
         self.errHistory.append(self._err)
         self._iter += 1
         
     def trainBFGS(self):
-        #wstar = fmin_bfgs(self._objFunc, self._w.copy(), fprime = self._jacObjFunc, callback = self._optCallback, maxiter=200)
-        wstar = fmin_bfgs(self._objFunc, self._w.copy(), callback = self._optCallback, maxiter=200)
+        wstar = fmin_bfgs(self._objFunc, self._w.copy(), fprime = self._jacObjFunc, callback = self._optCallback, **self._optArgs)
+
         # set the optimal weights
         self._w[:] = wstar
 
