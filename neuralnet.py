@@ -285,7 +285,7 @@ class Trainer():
             jInd = w.size
             # calculate delta at the output neurons
             lLayer = self._net.layers[-1]
-            delta = self._errorFunc.derivative(outPoint, targPoint)
+            delta = self._errorFunc.derivative(outPoint, targPoint) * lLayer.actFunc.derivative(lLayer.a)
             delta = delta.T
             for lInd in reversed(range(self._net.N)):
                 l = self._net.layers[lInd]
