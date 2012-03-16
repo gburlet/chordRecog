@@ -65,11 +65,23 @@ def learnHMM(M, addOne = True, features = 't', featureNorm = 'L1', covType = 'fu
 
         # perform feature normalization
         if featureNorm == 'L1':
-            chroma /= np.sum(np.abs(chroma))
+            if features == 'tb':
+                chroma[0:12] /= np.sum(np.abs(chroma[0:12]))
+                chroma[12:24] /= np.sum(np.abs(chroma[12:24]))
+            else:
+                chroma /= np.sum(np.abs(chroma))
         elif featureNorm == 'L2':
-            chroma /= np.sum(chroma ** 2)
+            if features == 'tb':
+                chroma[0:12] /= np.sum(chroma[0:12] ** 2)
+                chroma[12:24] /= np.sum(chroma[12:24] ** 2)
+            else:
+                chroma /= np.sum(chroma ** 2)
         elif featureNorm == 'Linf':
-            chroma /= np.max(np.abs(chroma))
+            if features == 'tb':
+                chroma[0:12] /= np.max(np.abs(chroma[0:12]))
+                chroma[12:24] /= np.max(np.abs(chroma[12:24]))
+            else:
+                chroma /= np.max(np.abs(chroma))
 
         simpleQuality = obs[35].strip()
         if simpleQuality != "NA":
