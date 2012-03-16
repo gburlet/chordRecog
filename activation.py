@@ -13,8 +13,8 @@ class Sigmoid:
     def __call__(self, a):
         return 1.0 / (1.0 + np.exp(-a))
 
-    def derivative(self, x):
-        return self(x) * (1.0 - self(x))
+    def derivative(self, a):
+        return self(a) * (1.0 - self(a))
 
 class ArcTan:
     '''
@@ -25,8 +25,22 @@ class ArcTan:
     def __call__(self, a):
         return np.tanh(a)
 
-    def derivative(self, x):
-        return 1.0 - (self(x) ** 2)
+    def derivative(self, a):
+        return 1.0 - (self(a) ** 2)
+
+class SoftMax:
+    '''
+    Softmax activation function. Ensures output nodes can be interpreted as
+    a probability distribution. That is, the output nodes sum to 1 and are all 
+    0 <= yk <= 1
+    '''
+    outputMinMax = [0.0, 1.0]
+
+    def __call__(self, a):
+        return np.exp(a) / np.sum(np.exp(a))
+
+    def derivative(self, a):
+        return self(a) * (1.0 - self(a))
 
 class Identity:
     '''
@@ -37,5 +51,5 @@ class Identity:
     def __call__(self, a):
         return a
 
-    def derivative(self, x):
-        return np.ones_like(x)
+    def derivative(self, a):
+        return np.ones_like(a)
