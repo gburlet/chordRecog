@@ -22,10 +22,10 @@ ytrain = f(xtrain)
 # The hidden layer has 5 neurons, with 1 output.
 # assumes full connectivity between layer neurons.
 # uses sigmoid activation function by default at each layer.
-net = nn.NeuralNet([1, 5, 1], actFunc=[act.Sigmoid()]*2)
+net = nn.NeuralNet([1, 5, 1], actFunc=[act.Sigmoid(), act.Identity()])
 
 # train using BFGS and sum of squared error by default
-err = net.train(xtrain, ytrain, gtol = 1e-2, maxiter = 155, show = 25)
+err = net.train(xtrain, ytrain, gtol = 1e-6, maxiter = 250, show = 25)
 
 # run the input through the network
 ytest = net.calcOutput(xtrain)

@@ -285,7 +285,7 @@ class Trainer():
             jInd = w.size
             # calculate delta at the output neurons
             lLayer = self._net.layers[-1]
-            delta = self._errorFunc.derivative(outPoint, targPoint) * lLayer.actFunc.derivative(lLayer.a)
+            delta = self._errorFunc.derivative(outPoint, targPoint) * lLayer.actFunc.derivative(outPoint)
             delta = delta.T
             for lInd in reversed(range(self._net.N)):
                 l = self._net.layers[lInd]
@@ -299,8 +299,7 @@ class Trainer():
                 # (do not include delta for bias, since that isn't backed up)
                 if lInd > 0:
                     lPrev = self._net.layers[lInd-1]
-                    a = lPrev.a[:,np.newaxis]
-                    delta = np.dot(l.w.T[1:,:], delta) * lPrev.actFunc.derivative(a)
+                    delta = np.dot(l.w.T[1:,:], delta) * lPrev.actFunc.derivative(l.input[1:,np.newaxis])
 
                 jInd -= numW
 

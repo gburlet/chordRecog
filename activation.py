@@ -13,8 +13,8 @@ class Sigmoid:
     def __call__(self, a):
         return 1.0 / (1.0 + np.exp(-a))
 
-    def derivative(self, a):
-        return self(a) * (1.0 - self(a))
+    def derivative(self, z):
+        return z * (1.0 - z)
 
 class ArcTan:
     '''
@@ -25,8 +25,8 @@ class ArcTan:
     def __call__(self, a):
         return np.tanh(a)
 
-    def derivative(self, a):
-        return 1.0 - (self(a) ** 2)
+    def derivative(self, z):
+        return 1.0 - (z ** 2)
 
 class SoftMax:
     '''
@@ -39,8 +39,8 @@ class SoftMax:
     def __call__(self, a):
         return np.exp(a) / np.sum(np.exp(a))
 
-    def derivative(self, a):
-        return self(a) * (1.0 - self(a))
+    def derivative(self, z):
+        return z * (1.0 - z)
 
 class Identity:
     '''
@@ -51,5 +51,5 @@ class Identity:
     def __call__(self, a):
         return a
 
-    def derivative(self, a):
-        return np.ones_like(a)
+    def derivative(self, z):
+        return np.ones_like(z)
