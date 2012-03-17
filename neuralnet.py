@@ -195,6 +195,12 @@ class Layer():
         # set activation function for layer
         self.actFunc = actFunc
 
+        # if softmax activation, check partition bounds
+        if isinstance(self.actFunc, act.Softmax) and self.actFunc._partition is not None:
+            for part in self.actFunc._partition:
+                if part <= 0 or part >= self.M:
+                    raise ValueError("NeuralNet: invalid partition for softmax activation function output")
+
     def calcOutput(self, input):
         self.input[1:] = input
         self.a = np.sum(self.w * self.input, axis=1)

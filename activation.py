@@ -31,15 +31,43 @@ class ArcTan:
 class SoftMax:
     '''
     Softmax activation function. Ensures output nodes can be interpreted as
-    a probability distribution. That is, the output nodes sum to 1 and are all 
+    a probability distribution. That is, the output activations sum to 1 and are all 
     0 <= yk <= 1
     '''
     outputMinMax = [0.0, 1.0]
 
+    def __init__(self, partition = None):
+        '''
+        Initializes the activation function with the ability to partition output nodes
+        to perform activations on each partition seperately.
+
+        PARAMETERS
+        ----------
+        partition {List}: size of list is the number of partitions, entries are the partition
+                          boundaries. Defaults to one partition (all of the outputs).
+                          e.g., in list of 12, partition = [6], calculates softmax from 0:5 then 6:12 
+        '''
+        self._partition = partition
+
     def __call__(self, a):
-        return np.exp(a) / np.sum(np.exp(a))
+        if self._partition is None:
+            return np.exp(a) / np.sum(np.exp(a))
+        else:
+            activation = np.zeros_like(a)
+            pPart = 0
+            for part in self._partition:
+                activation[pPart:part] = np.exp(a[pPart:part]) / np.sum(np.exp(a[pPart:part]))
+                pPart = part
+            # now calculate softmax over last partition boundary to the end
+            activation[pPart:] = np.exp(a[pPart:]) / np.sum(np.exp(a[pPart:]))
+
+            return activation
 
     def derivative(self, z):
+        '''
+        Derivative calculation does not need to be partitioned since the function takes the yk output neuron
+        values as an argument, which have already been calculated with partitions.
+        '''
         return z * (1.0 - z)
 
 class Identity:
