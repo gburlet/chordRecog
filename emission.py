@@ -2,6 +2,8 @@ import numpy as np
 from scipy import linalg as slinalg
 from numpy import linalg as nlinalg
 
+from utilities import logsumexp
+
 # for mean initialization
 from sklearn import cluster
 
@@ -262,7 +264,7 @@ class GMM:
 
         RETURNS
         -------
-        lnP {1xN}: ln[sum_M p(l)*p(Xi | l)]
+        lnP (N,): ln[sum_M p(l)*p(Xi | l)]
             ln probabilities of each observation in the training data,
             marginalizing over mixture components to get ln[p(Xi)]
         posteriors {NxM}: p(l | Xi)
@@ -285,7 +287,7 @@ class GMM:
 
             elif self.covType == 'full':
                 try:
-                    # U*U.T = _Sigma[l,:,:]
+                    # cholesky decomposition => U*U.T = _Sigma[l,:,:]
                     U = slinalg.cholesky(self._Sigma[l,:,:], lower=True)
                 except slinalg.LinAlgError:
                     # reinitialization trick is from scikit learn GMM
@@ -300,18 +302,9 @@ class GMM:
         lnP_Xi_l += self._lnw
         
         # calculate sum of probabilities (marginalizing over mixtures)
-        # divide by max to avoid underflow
-        maxP = lnP_Xi_l.max(axis=1)[:,np.newaxis]
+        lnP = logsumexp(lnP_Xi_l, axis=1)
 
-        lnP = np.log(np.sum(np.exp(lnP_Xi_l - maxP), axis=1)) + maxP.T
-        # for floating point errors ... there's nothing else we can do here
-        # replace NaN or inf with the max lnP
-        # taken from Matlab GMM EM library: 
-        # http://www.mathworks.com/matlabcentral/fileexchange/26184-em-algorithm-for-gaussian-mixture-model
-        errInd = ~np.isfinite(lnP)
-        lnP[errInd] = maxP.T[errInd]
-
-        posteriors = np.exp(lnP_Xi_l - lnP.T)
+        posteriors = np.exp(lnP_Xi_l - lnP[:,np.newaxis])
         
         return lnP, posteriors
             
@@ -357,7 +350,7 @@ class GMM:
 
         RETURNS
         -------
-        lnP {1xN}: ln[sum_M p(l)*p(Xi | l)]
+        lnP (N,): ln[sum_M p(l)*p(Xi | l)]
             ln probabilities of each observation in the training data,
             marginalizing over mixture components to get ln[p(Xi)]
         '''

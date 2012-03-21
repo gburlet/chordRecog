@@ -182,4 +182,4 @@ def learnHMM(M, addOne = True, features = 't', featureNorm = 'L1', covType = 'fu
 
     return pi, A, B, QLabels, Xtest, ytest
 
-#pi, A, B, labels, Xtest, ytest = learnHMM(3, covType='full', features = 'tb', featureNorm = 'L1', leaveOneOut = 3, obsThresh=1250)
+#pi, A, B, labels, Xtest, ytest = learnHMM(3, covType='full', features = 'tb', featureNorm = 'L1', leaveOneOut = 3, obsThresh=0)

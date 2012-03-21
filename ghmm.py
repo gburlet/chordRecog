@@ -1,5 +1,6 @@
 import numpy as np
 from emission import *
+from utilities import logsumexp
 
 class GHMM:
     ''' 
@@ -107,6 +108,89 @@ class GHMM:
     CLASS METHODS
     -------------
     '''
+    def _forward(self, O):
+        '''
+        Calculates the forward variable, alpha: the probability of the partial observation
+        sequence O1 O2 ... Ot (until time t) and state Si at time t.
+
+        PARAMETERS
+        ----------
+        O {TxD}: observation matrix with a sequence of T observations, each having dimension D
+        
+        RETURNS
+        -------
+        lnP {Float}: log probability of the observation sequence O
+        lnAlpha {T,N}: log of the forward variable: the probability of the partial observation
+                       sequence O1 O2 ... Ot (until time t) and state Si at time t.
+        '''
+
+        T, D = O.shape
+
+        # check dimensions of provided observations agree with the trained emission distributions
+        dim = self._B[0].mu.shape[1]
+        if D != dim:
+            raise ValueError('GHMM: observation dimension does not agree with the trained emission distributions for the model')
+
+        # calculate lnP for each observation for each state's emission distribution
+        # lnP_obs {T, N}
+        lnP_obs = np.zeros([T,self.N])
+        for i in range(0,self.N):
+            lnP_obs[:,i] = self._B[i].calcLnP(O)
+
+        # forward variable, alpha {T,N}
+        lnAlpha = np.zeros([T,self.N])
+
+        # Step 1: Initialization
+        lnAlpha[0,:] = np.log(self._pi) + lnP_obs[0,:]
+
+        # Step 2: Induction
+        for t in range(1,T-1):
+            ln_alpha[t,:] = logsumexp(lnAlpha[[t-1],:].T + np.log(self._A), axis=0) + lnP_obs[t,:]
+
+        # Step 3: Termination
+        lnP = logsumexp(lnAlpha[T,:])
+
+        return lnP, lnAlpha
+
+    def _backward(self, O):
+        '''
+        Calculates the backward variable, beta: the probability of the partial observation 
+        sequence 0T OT-1 ... Ot+1 (backwards to time t+1) and State Si at time t+1
+
+        PARAMETERS
+        ----------
+        O {TxD}: observation matrix with a sequence of T observations, each having dimension D
+        
+        RETURNS
+        -------
+        lnBeta {T,N}: log of the backward variable: the probability of the partial observation 
+        sequence 0T OT-1 ... Ot+1 (backwards to time t+1) and State Si at time t+1
+        '''
+        
+        T, D = O.shape
+
+        # check dimensions of provided observations agree with the trained emission distributions
+        dim = self._B[0].mu.shape[1]
+        if D != dim:
+            raise ValueError('GHMM: observation dimension does not agree with the trained emission distributions for the model')
+
+        # calculate lnP for each observation for each state's emission distribution
+        # lnP_obs {T, N}
+        lnP_obs = np.zeros([T,self.N])
+        for i in range(0,self.N):
+            lnP_obs[:,i] = self._B[i].calcLnP(O)
+
+        # backward variable, beta {T,N}
+        # Step 1: Initialization
+        # since ln(1) = 0
+        lnBeta = np.zeros([T,self.N])
+
+        # Step 2: Induction
+        for t in reversed(range(0,T-1)):
+            lnBeta[t,:] = logsumexp(np.log(self._A) + lnP_obs[t+1,:] + lnBeta[t+1,:], axis=1)
+
+        return lnBeta
+
     def viterbi(self, O, labels = True):
         '''
         Calculates the q*, the most probable state sequence corresponding from the observations O.
@@ -132,14 +216,14 @@ class GHMM:
 
         # calculate lnP for each observation for each state's emission distribution
         # lnP_obs {T, N}
-        lnP_obs = np.zeros((T,self.N))
+        lnP_obs = np.zeros([T,self.N])
         for i in range(0,self.N):
             lnP_obs[:,i] = self._B[i].calcLnP(O)
 
         # lnDelta {TxN}: best score along a single path, at time t, accounting for the first t observations and ending in state Si
-        lnDelta = np.zeros((T,self.N))
+        lnDelta = np.zeros([T,self.N])
         # lnPsi {TxN}: arg max of best scores for each t and j state
-        lnPsi = np.zeros((T,self.N), dtype=np.int)
+        lnPsi = np.zeros([T,self.N], dtype=np.int)
 
         # Step 1: initialization
         lnDelta[0,:] = np.log(self._pi) + lnP_obs[0,:]
@@ -153,8 +237,8 @@ class GHMM:
         lnDelta[lnDelta <= -1e200] = -np.Inf
 
         # Step 3: termination
-        qstar_t = np.argmax(lnDelta[-1,:])
-        pstar = lnDelta[-1,qstar_t]
+        qstar_t = np.argmax(lnDelta[T-1,:])
+        pstar = lnDelta[T-1,qstar_t]
 
         qstar = []
         for t in reversed(range(0,T)):
