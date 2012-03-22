@@ -135,6 +135,9 @@ def learnHMM(M, addOne = True, features = 't', featureNorm = 'L1', covType = 'fu
             # add the observations chord label
             ytest.append(chordName)
     
+    # close file pointer    
+    groundTruth.close()
+
     QLabels = sorted(QLabels)
     
     # prune states with insufficient observations

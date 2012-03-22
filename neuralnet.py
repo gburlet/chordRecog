@@ -196,7 +196,7 @@ class Layer():
         self.actFunc = actFunc
 
         # if softmax activation, check partition bounds
-        if isinstance(self.actFunc, act.Softmax) and self.actFunc._partition is not None:
+        if isinstance(self.actFunc, act.SoftMax) and self.actFunc._partition is not None:
             for part in self.actFunc._partition:
                 if part <= 0 or part >= self.M:
                     raise ValueError("NeuralNet: invalid partition for softmax activation function output")
