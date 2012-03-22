@@ -4,7 +4,7 @@ import neuralnet as nn
 import activation as act
 import error
 
-def learnNN(chromaNorm = 'L1', constantQNorm = 'Linf', deltaTrain = 2, nnStruct = [256, 150, 24], errorFunc = 'KLDiv', verbose = False):
+def learnNN(chromaNorm = 'L1', constantQNorm = 'Linf', deltaTrain = 2, nnStruct = [256, 150, 24], errorFunc = 'SSE', verbose = False):
     '''
     chromaNorm: L1, L2, Linf, or None, normalization of chroma
     constantQNorm: L1, L2, Linf, or None, normalization of constant q transform
@@ -145,4 +145,4 @@ def trainNet(Xtrain, Xtarget, net, errorFunc, verbose = False):
     if verbose:
         print "Done."
 
-learnNN(verbose = True, nnStruct = [256, 24, 24])
+learnNN(verbose = True, nnStruct = [256, 50, 24], errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'Linf')
