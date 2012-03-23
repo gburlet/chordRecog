@@ -1,7 +1,7 @@
 import numpy as np
 import activation as act
 import error
-from scipy.optimize import fmin_bfgs
+from scipy.optimize import fmin_bfgs, fmin_l_bfgs_b
 
 class NeuralNet():
     '''
@@ -125,7 +125,7 @@ class NeuralNet():
             numW += l.w.size
         return numW   
 
-    def train(self, Xtrain, Ytrain, **args):
+    def train(self, Xtrain, Ytrain, method='bfgs', errorFunc='SSE', show=25, **args):
         '''
         Train the neural network using the Broyden-Fletcher-Goldfarb-Shanno algorithm
 
@@ -133,28 +133,67 @@ class NeuralNet():
         ----------
         Xtrain {T,D}: training input data, T points of dimensionality D
         Ytrain {T,D}: training target data, T points of dimensionality D
+        method {String}: training method
+                Quasi-Newton method of Broyden, Fletcher, Goldfarb, and Shanno: 'bfgs'
+                Bounded, limited memory BFGS (use for large networks): 'l_bfgs_b'
+                Default: 'bfgs'
+        errorFunc {String}: error function
+                Sum of squared errors: 'SSE'
+                Kullback-Leibler Divergence: 'KLDiv'
+                Default: 'SSE'
+        show {Int}: number of iterations to pass before printing status (not enabled for l_bfgs_b)
+
         args:
-            method: 'bfgs'
-            errorFunc: error function
-            maxiter {int}: maximum number of training iterations, 500 default
-            gtol {float}: gradient the norm must be less than before succesful termination
-            show {int}: number of iterations to pass before printing status
+            BFGS
+            ----
+            maxiter {Int}: maximum number of training iterations
+            gtol {Float}: gradient the norm must be less than before succesful termination
+            
+            L-BFGS-B
+            --------
+            wBounds {Int,Int}: bounds on each weight parameter as tuple (min,max), default: None
+            m {Int}: number of terms to approximate the hessian
+                Default: 10
+            factr {Float}: scalar to control number of iterations.
+                Low accuracy: 1e12
+                Moderate accuracy: 1e7
+                High accuracy: 10.0
+                Default: 1e7
+            pgtol {Float}: iteration stops when max(grad) <= pgtol
+                Default: 1e-05
+            disp {Boolean}: True is verbose, False is silent
+                Default: False
+            maxfun {Int}: maximum number of function evaluations
+                Default: 15000
         '''
-        # set error function
-        if "errorFunc" in args:
-            errorFunc = args["errorFunc"]
-        else:
-            errorFunc = error.SSE()
-
-        if "method" in args:
-            method = args["method"]
-        else:
-            method = "bfgs"
-
-        trainer = Trainer(self, Xtrain, Ytrain, errorFunc, **args)
+        trainer = Trainer(self, Xtrain, Ytrain, errorFunc, show)
 
         if method == "bfgs":
-            return trainer.trainBFGS()
+            # sanitize arguments to optimization function
+            optArgs = {}
+            if "maxiter" in args:
+                optArgs["maxiter"] = args["maxiter"]
+            if "gtol" in args:
+                optArgs["gtol"] = args["gtol"]
+
+            return trainer.trainBFGS(**optArgs)
+        elif method == "l_bfgs_b":
+            # sanitize arguments to optimization function
+            optArgs = {}
+            if "wBounds" in args:
+                optArgs["bounds"] = [args["wBounds"]] * self._numWeights()
+            if "m" in args:
+                optArgs["m"] = args["m"]
+            if "factr" in args:
+                optArgs["factr"] = args["factr"]
+            if "pgtol" in args:
+                optArgs["pgtol"] = args["pgtol"]
+            if "disp" in args:
+                optArgs["disp"] = args["disp"]
+            if "maxfun" in args:
+                optArgs["maxfun"] = args["maxfun"]
+
+            return trainer.trainL_BFGS_B(**optArgs)
         else:
             raise NotImplementedError("This training method has not been implemented yet")
 
@@ -211,28 +250,21 @@ class Trainer():
     Trainer for the neural network.
     '''
 
-    def __init__(self, net, Xtrain, Ytrain, errorFunc, **args):
+    def __init__(self, net, Xtrain, Ytrain, errorFunc, show):
         self._net = net
         self.train = Xtrain
         self.target = Ytrain
-        self._errorFunc = errorFunc
+        self._show = show
         self._err = 0.0
         self._iter = 0
-        self._optArgs = {}
 
-        if "show" in args:
-            self._show = args["show"]
+        # set error function
+        if errorFunc == 'SSE':
+            self._errorFunc = error.SSE()
+        elif errorFunc == 'KLDiv':
+            self._errorFunc = error.KLDiv()
         else:
-            self._show = 0
-
-        # options for the optimization algorithm
-        if "maxiter" in args:
-            self._optArgs["maxiter"] = args["maxiter"]
-        else:
-            self._optArgs["maxiter"] = 250
-
-        if "gtol" in args:
-            self._optArgs["gtol"] = args["gtol"]
+            raise NotImplementedError("This error function has not been implemented yet")
 
         # keep track of error for plotting
         self.errHistory = []
@@ -325,10 +357,28 @@ class Trainer():
         self.errHistory.append(self._err)
         self._iter += 1
         
-    def trainBFGS(self):
-        wstar = fmin_bfgs(self._objFunc, self._w.copy(), fprime = self._jacObjFunc, callback = self._optCallback, **self._optArgs)
+    def trainBFGS(self, **optArgs):
+        wstar = fmin_bfgs(self._objFunc, self._w.copy(), fprime = self._jacObjFunc, callback = self._optCallback, **optArgs)        
+        
+        # set the optimal weights
+        self._w[:] = wstar
+
+        return self.errHistory
+
+    def trainL_BFGS_B(self, **optArgs):
+        wstar, finalErr, d = fmin_l_bfgs_b(self._objFunc, self._w.copy(), fprime=self._jacObjFunc, **optArgs)
+
+        if d["warnflag"] == 0:
+            print "Converged to a solution in ", d["funcalls"], " steps."
+        elif d["warnflag"] == 1:
+            print "Exceeded maximum number of iterations."
+        else:
+            print d["task"]
+
+        self.errHistory.append(finalErr)
 
         # set the optimal weights
         self._w[:] = wstar
 
         return self.errHistory
+

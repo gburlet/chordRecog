@@ -24,8 +24,9 @@ ytrain = f(xtrain)
 # uses sigmoid activation function by default at each layer.
 net = nn.NeuralNet([1, 5, 1], actFunc=[act.Sigmoid(), act.Identity()])
 
-# train using BFGS and sum of squared error by default
-err = net.train(xtrain, ytrain, gtol = 1e-6, maxiter = 250, show = 25)
+# train using BFGS and sum of squares error
+optArgs = {'gtol': 1e-6, 'maxiter': 250}
+err = net.train(xtrain, ytrain, method='bfgs', error = 'SSE', show = 25, **optArgs)
 
 # run the input through the network
 ytest = net.calcOutput(xtrain)
