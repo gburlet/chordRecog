@@ -252,4 +252,9 @@ def trainNet(Xtrain, Xtarget, net, errorFunc, verbose = False):
     if verbose:
         print "Done Training."
 
-learnNNbuff(verbose = True, nnStruct = [256, 50, 24], errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'Linf')
+net = learnNN(verbose = True, nnStruct = [256, 50, 24], errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'Linf')
+wstar = net.flattenWeights()
+
+# save optimal weights
+np.save('wstar.npy', wstar)
+print "all done!"
