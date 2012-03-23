@@ -169,9 +169,9 @@ def learnNN(chromaNorm = 'L1', constantQNorm = 'Linf', deltaTrain = 2, nnStruct 
         print "Retrieving Features."
 
     # read constant-q transform preliminary features
-    Xtrain = np.loadtxt('data/logfreqspec.csv', dtype=np.float, delimiter=',', ndim=2)
+    Xtrain = np.loadtxt('data/logfreqspec.csv', dtype=np.float, delimiter=',', usecols=range(1,257))
     # read bass and treble chromagram features
-    Xtarget = np.loadtxt('data/bothchroma.csv', dtype=np.float, delimiter=',', ndim=2)
+    Xtarget = np.loadtxt('data/bothchroma.csv', dtype=np.float, delimiter=',', usecols=range(1,25))
 
     if verbose:
         print "Normalizing Features."
