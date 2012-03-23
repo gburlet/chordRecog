@@ -50,6 +50,7 @@ def learnNNbuff(chromaNorm = 'L1', constantQNorm = 'Linf', deltaTrain = 2, nnStr
     cFile = open('data/bothchroma.csv', 'r')
 
     songNum = 0
+    eligibleTrain = False
     for cObs, qObs in izip(cFile, qFile):
         cObs = cObs.split(",")
         qObs = qObs.split(",")
@@ -61,15 +62,21 @@ def learnNNbuff(chromaNorm = 'L1', constantQNorm = 'Linf', deltaTrain = 2, nnStr
                 raise ValueError("Feature files out of sync")
             
             songNum += 1
+            
+            if songNum > 1:
+                eligibleTrain = True
+
             if verbose:
                 print "Processing song: ", cObs[0]
 
         # train the neural net with buffered features
-        if songNum % deltaTrain == 0:
+        if eligibleTrain and songNum % deltaTrain == 0:
             trainNet(np.asarray(Xtrain), np.asarray(Xtarget), net, errorFunc, verbose)
             # clear feature buffers
             del Xtrain[:]
             del Xtarget[:]
+
+            eligibleTrain = False
 
         # double check features are in sync by timestamp
         if float(cObs[1]) != float(qObs[1]):
@@ -112,7 +119,8 @@ def learnNNbuff(chromaNorm = 'L1', constantQNorm = 'Linf', deltaTrain = 2, nnStr
         Xtarget.append(chroma)
 
     # train leftovers (< deltaTrain songs)
-    trainNet(np.asarray(Xtrain), np.asarray(Xtarget), net, errorFunc, verbose)
+    if len(Xtrain) > 0:
+        trainNet(np.asarray(Xtrain), np.asarray(Xtarget), net, errorFunc, verbose)
 
     if verbose:
         print "Done training neural network."
@@ -139,10 +147,6 @@ def learnNN(chromaNorm = 'L1', constantQNorm = 'Linf', deltaTrain = 2, nnStruct 
     net: trained neural network
     '''
 
-    # initialize feature storage
-    Xtrain = []     # Constant-Q transform
-    Xtarget = []    # Bass and treble chromagram
-
     # Set up neural network
     # uses sigmoid activation function by default at each layer
     # output activation depends on the type of chromaNorm specified
@@ -161,72 +165,47 @@ def learnNN(chromaNorm = 'L1', constantQNorm = 'Linf', deltaTrain = 2, nnStruct 
     # assumes full connectivity between layer neurons.
     net = nn.NeuralNet(nnStruct, actFunc=activations)
 
+    if verbose:
+        print "Retrieving Features."
+
     # read constant-q transform preliminary features
-    qFile = open('data/logfreqspec.csv', 'r')
+    Xtrain = np.loadtxt('data/logfreqspec.csv', dtype=np.float, delimiter=',', ndim=2)
     # read bass and treble chromagram features
-    cFile = open('data/bothchroma.csv', 'r')
-
-    for cObs, qObs in izip(cFile, qFile):
-        cObs = cObs.split(",")
-        qObs = qObs.split(",")
-        
-        # check if we have moved to a new song
-        if cObs[0]:
-            # check features are in sync by audio file path
-            if not qObs[0] or cObs[0] != qObs[0]:
-                raise ValueError("Feature files out of sync")
-            
-            if verbose:
-                print "Processing song: ", cObs[0]
-
-        # double check features are in sync by timestamp
-        if float(cObs[1]) != float(qObs[1]):
-            raise ValueError("Feature files out of sync")
-        
-        # get Constant-Q transform
-        constantQ = np.asfarray(qObs[2:])
-        
-        # perform feature normalization
-        if np.sum(constantQ) != 0:
-            if constantQNorm == 'L1':
-                constantQ /= np.sum(np.abs(constantQ))
-            elif constantQNorm == 'L2':
-                constantQ /= np.sum(constantQ ** 2)
-            elif constantQNorm == 'Linf':
-                constantQ /= np.max(np.abs(constantQ))
-
-        Xtrain.append(constantQ)
-
-        # get chromagrams
-        chroma = np.asfarray(cObs[2:])
-
-        # perform feature normalization
-        if chromaNorm == 'L1':
-            if np.sum(chroma[0:12]) != 0:
-                chroma[0:12] /= np.sum(np.abs(chroma[0:12]))
-            if np.sum(chroma[12:24]) != 0:
-                chroma[12:24] /= np.sum(np.abs(chroma[12:24]))
-        elif chromaNorm == 'L2':
-            if np.sum(chroma[0:12]) != 0:
-                chroma[0:12] /= np.sum(chroma[0:12] ** 2)
-            if np.sum(chroma[12:24]) != 0:
-                chroma[12:24] /= np.sum(chroma[12:24] ** 2)
-        elif chromaNorm == 'Linf':
-            if np.sum(chroma[0:12]) != 0:
-                chroma[0:12] /= np.max(np.abs(chroma[0:12]))
-            if np.sum(chroma[12:24]) != 0:
-                chroma[12:24] /= np.max(np.abs(chroma[12:24]))
-
-        Xtarget.append(chroma)
-
-    # batch train Neural Network
-    trainNet(np.asarray(Xtrain), np.asarray(Xtarget), net, errorFunc, verbose)
+    Xtarget = np.loadtxt('data/bothchroma.csv', dtype=np.float, delimiter=',', ndim=2)
 
     if verbose:
-        print "Cleaning file pointers."
+        print "Normalizing Features."
 
-    qFile.close()
-    cFile.close()
+    divInd = np.sum(Xtrain, axis=1) != 0
+    # perform feature normalization
+    if constantQNorm == 'L1':
+        Xtrain[divInd,:] /= np.sum(np.abs(Xtrain[divInd,:]), axis=1)[:,np.newaxis]
+    elif constantQNorm == 'L2':
+        Xtrain[divInd,:] /= np.sum(Xtrain[divInd,:] ** 2, axis=1)[:,np.newaxis]
+    elif constantQNorm == 'Linf':
+        Xtrain[divInd,:] /= np.max(np.abs(Xtrain[divInd,:]), axis=1)[:,np.newaxis]
+    del divInd
+
+    divIndTreble = np.sum(Xtarget[:,0:12], axis=1) != 0
+    divIndBass = np.sum(Xtarget[:,12:24], axis=1) != 0
+    # perform feature normalization
+    if chromaNorm == 'L1':
+        Xtarget[divIndTreble,0:12] /= np.sum(np.abs(Xtarget[divIndTreble,0:12]), axis=1)[:,np.newaxis]
+        Xtarget[divIndBass,12:24] /= np.sum(np.abs(Xtarget[divIndBass,12:24]), axis=1)[:,np.newaxis]
+    elif chromaNorm == 'L2':
+        Xtarget[divIndTreble,0:12] /= np.sum(Xtarget[divIndTreble,0:12] ** 2, axis=1)[:,np.newaxis]
+        Xtarget[divIndBass,12:24] /= np.sum(Xtarget[divIndBass,12:24] ** 2, axis=1)[:,np.newaxis]
+    elif chromaNorm == 'Linf':
+        Xtarget[divIndTreble,0:12] /= np.max(np.abs(Xtarget[divIndTreble,0:12]), axis=1)[:,np.newaxis]
+        Xtarget[divIndBass,12:24] /= np.max(np.abs(Xtarget[divIndBass,12:24]), axis=1)[:,np.newaxis]
+    del divIndTreble
+    del divIndBass
+
+    # batch train Neural Network
+    trainNet(Xtrain, Xtarget, net, errorFunc, verbose)
+
+    if verbose:
+        print "All done!"
 
     return net
 
