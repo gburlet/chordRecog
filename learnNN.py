@@ -241,9 +241,12 @@ def trainNet(Xtrain, Xtarget, net, errorFunc, verbose = False):
     '''
     
     if verbose:
+        iprint = 0
         print "Training ..."
+    else:
+        iprint = -1
 
-    optArgs = {'wBounds': (-2,2), 'm': 10, 'factr': 1e7, 'pgtol': 1e-05, 'disp': verbose, 'maxfun': 15000}
+    optArgs = {'wBounds': (-2,2), 'm': 10, 'factr': 1e7, 'pgtol': 1e-05, 'iprint': iprint, 'maxfun': 15000}
     err = net.train(Xtrain, Xtarget, method='l_bfgs_b', error = errorFunc, **optArgs)
 
     if verbose:

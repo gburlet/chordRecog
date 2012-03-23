@@ -161,8 +161,11 @@ class NeuralNet():
                 Default: 1e7
             pgtol {Float}: iteration stops when max(grad) <= pgtol
                 Default: 1e-05
-            disp {Boolean}: True is verbose, False is silent
-                Default: False
+            iprint {Int}: frequency of output
+                silent: -1
+                print to stdout: 0
+                print to file named iterate.dat in pwd: 1
+                Default: -1
             maxfun {Int}: maximum number of function evaluations
                 Default: 15000
         '''
@@ -188,8 +191,8 @@ class NeuralNet():
                 optArgs["factr"] = args["factr"]
             if "pgtol" in args:
                 optArgs["pgtol"] = args["pgtol"]
-            if "disp" in args:
-                optArgs["disp"] = args["disp"]
+            if "iprint" in args:
+                optArgs["iprint"] = args["iprint"]
             if "maxfun" in args:
                 optArgs["maxfun"] = args["maxfun"]
 
