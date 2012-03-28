@@ -383,10 +383,10 @@ class Trainer():
         w: flattened vector of network weights at a given iteration
         '''
         if self._iter % self._show == 0:
-            print "Iteration ", self._iter, "; error: ", self._err
+            print "Iteration ", self._iter, "; error: ", self._err / len(self.train)
     
         if log:
-            self.errHistory.append(self._err)
+            self.errHistory.append(self._err / len(self.train))
 
         self._iter += 1
         
@@ -404,7 +404,7 @@ class Trainer():
 
                 # calculate error over all training points
                 self._objFunc(self._w)
-                self._optCallback(None, log = False)
+                self._optCallback(None, log = True)
 
                 # check termination conditions satisfied
                 if abs(prevErr - self._err) < convEps:
