@@ -230,13 +230,13 @@ def trainNet(Xtrain, Xtarget, net, errorFunc, verbose = False):
     # err = net.train(Xtrain, Xtarget, method='l_bfgs_b', error = errorFunc, **optArgs)
     
     # gradient descent
-    optArgs = {'eta': 1e-2, 'sequential': True, 'maxiter': 500, 'convEps': 1e-2}
+    optArgs = {'eta': 1e-2, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
     err = net.train(Xtrain, Xtarget, method = 'graddesc', error = errorFunc, show = 1, **optArgs)
  
     if verbose:
         print "Done Training."
 
-net = learnNNbuff(verbose = True, nnStruct = [256, 50, 24], deltaTrain = 25, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'Linf')
+net = learnNNbuff(verbose = True, nnStruct = [256, 150, 50, 24], deltaTrain = 25, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'Linf')
 wstar = net.flattenWeights()
 
 # save optimal weights
