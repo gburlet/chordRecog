@@ -1,6 +1,8 @@
 import numpy as np
 import activation as act
 import error
+from utilities import unsqueeze
+from itertools import izip
 from scipy.optimize import fmin_bfgs, fmin_l_bfgs_b
 
 class NeuralNet():
@@ -54,11 +56,8 @@ class NeuralNet():
         output {TxK}: output of the network, T points of dimensionality K (number of network outputs)
         '''
 
-        if input.ndim == 2:
-            T,D = input.shape
-        else:
-            D = len(input)
-            T = 1
+        input = unsqueeze(input,2)
+        T,D = input.shape
 
         if D != self.D:
             raise ValueError("NeuralNet: invalid input dimensions")
@@ -136,6 +135,7 @@ class NeuralNet():
         method {String}: training method
                 Quasi-Newton method of Broyden, Fletcher, Goldfarb, and Shanno: 'bfgs'
                 Bounded, limited memory BFGS (use for large networks): 'l_bfgs_b'
+                Sequential Gradient Descent: 'graddesc'
                 Default: 'bfgs'
         errorFunc {String}: error function
                 Sum of squared errors: 'SSE'
@@ -168,8 +168,19 @@ class NeuralNet():
                 Default: -1
             maxfun {Int}: maximum number of function evaluations
                 Default: 15000
+
+            GRADIENT DESCENT
+            ----------------
+            eta {float}: learning rate
+                Default: 1e-2
+            sequential {Boolean}: use sequential or batch training
+                Default: sequential
+            maxiter {Int}: maximum number of training iterations
+                Default: 1000
+            convEps {Float}: convergence criterion (when to stop iterating)
         '''
-        trainer = Trainer(self, Xtrain, Ytrain, errorFunc, show)
+        
+        trainer = Trainer(self, unsqueeze(Xtrain,2), unsqueeze(Ytrain,2), errorFunc, show)
 
         if method == "bfgs":
             # sanitize arguments to optimization function
@@ -197,6 +208,19 @@ class NeuralNet():
                 optArgs["maxfun"] = args["maxfun"]
 
             return trainer.trainL_BFGS_B(**optArgs)
+        elif method == "graddesc":
+            # sanitize arguments to optimization function
+            optArgs = {}
+            if "eta" in args:
+                optArgs["eta"] = args["eta"]
+            if "sequential" in args:
+                optArgs["sequential"] = args["sequential"]
+            if "maxiter" in args:
+                optArgs["maxiter"] = args["maxiter"]
+            if "convEps" in args:
+                optArgs["convEps"] = args["convEps"]
+
+            return trainer.trainGradDesc(**optArgs)
         else:
             raise NotImplementedError("This training method has not been implemented yet")
 
@@ -296,9 +320,10 @@ class Trainer():
 
         # now calculate error
         self._err = self._errorFunc(output, self.target)
+        
         return self._err
 
-    def _jacObjFunc(self, w):
+    def _jacObjFunc(self, w, trainInd = None):
         '''
         Calculates the jacobian of the objective function using backpropagation
 
@@ -311,14 +336,17 @@ class Trainer():
         delta: vector with length equal to the number of weights in the network. 
                Each element is d(E)/d(w_ji) = d(E)/d(a_j) * d(a_j)/d(w_ji)
         '''
-
         # update network weights
         self._w[:] = w
 
         jacob = np.zeros(w.size)
 
+        # shouldn't slow down batch training, since it will just copy a reference in this case
+        train = self.train if trainInd is None else self.train[[trainInd],:]
+        target = self.target if trainInd is None else self.target[[trainInd],:]
+
         # sum gradients over all input points
-        for inPoint, targPoint in zip(self.train, self.target):
+        for inPoint, targPoint in izip(train, target):
             # run the input data through the neural net
             # outPoint {1xK}
             outPoint = self._net.calcOutput(inPoint[np.newaxis,:])
@@ -346,7 +374,7 @@ class Trainer():
 
         return jacob
                 
-    def _optCallback(self, w):
+    def _optCallback(self, w, log = True):
         '''
         Called after each iteration of optimization, as _optCallback(w), where w is the current parameter vector.
 
@@ -357,9 +385,33 @@ class Trainer():
         if self._iter % self._show == 0:
             print "Iteration ", self._iter, "; error: ", self._err
     
-        self.errHistory.append(self._err)
+        if log:
+            self.errHistory.append(self._err)
+
         self._iter += 1
         
+    def trainGradDesc(self, eta = 1e-2, convEps = 1e-5, maxiter = 250, sequential = True):
+        T = len(self.train)
+
+        if sequential:
+            prevErr = np.inf
+            # for each training iteration
+            for tind in xrange(maxiter):
+                # train one-by-one
+                for i in xrange(T):
+                    # calculate weight gradients and update
+                    self._w[:] -= eta * self._jacObjFunc(self._w, trainInd = i)
+
+                # calculate error over all training points
+                self._objFunc(self._w)
+                self._optCallback(None, log = False)
+
+                # check termination conditions satisfied
+                if abs(prevErr - self._err) < convEps:
+                    break
+
+        return self.errHistory
+                
     def trainBFGS(self, **optArgs):
         wstar = fmin_bfgs(self._objFunc, self._w.copy(), fprime = self._jacObjFunc, callback = self._optCallback, **optArgs)        
         

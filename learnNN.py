@@ -3,7 +3,7 @@ from itertools import izip
 import neuralnet as nn
 import activation as act
 
-def learnNNbuff(chromaNorm = 'L1', constantQNorm = 'Linf', deltaTrain = 2, nnStruct = [256, 150, 24], errorFunc = 'SSE', verbose = False):
+def learnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnStruct = [256, 150, 24], errorFunc = 'SSE', verbose = False):
     '''
     Learns neural network weights with buffered feature input (batch training in segments). 
     Use this function when thrashing to disk is a possibility
@@ -86,7 +86,7 @@ def learnNNbuff(chromaNorm = 'L1', constantQNorm = 'Linf', deltaTrain = 2, nnStr
         constantQ = np.asfarray(qObs[2:])
         
         # perform feature normalization
-        if np.sum(constantQ) != 0:
+        if constantQNorm is not None and np.sum(constantQ) != 0:
             if constantQNorm == 'L1':
                 constantQ /= np.sum(np.abs(constantQ))
             elif constantQNorm == 'L2':
@@ -225,13 +225,18 @@ def trainNet(Xtrain, Xtarget, net, errorFunc, verbose = False):
     else:
         iprint = -1
 
-    optArgs = {'wBounds': (-2,2), 'm': 10, 'factr': 1e7, 'pgtol': 1e-05, 'iprint': iprint, 'maxfun': 15000}
-    err = net.train(Xtrain, Xtarget, method='l_bfgs_b', error = errorFunc, **optArgs)
-
+    # l-bfgs-b
+    # optArgs = {'wBounds': (-100,100), 'm': len(Xtrain), 'factr': 1e7, 'pgtol': 1e-05, 'iprint': iprint, 'maxfun': 15000}
+    # err = net.train(Xtrain, Xtarget, method='l_bfgs_b', error = errorFunc, **optArgs)
+    
+    # gradient descent
+    optArgs = {'eta': 1e-2, 'sequential': True, 'maxiter': 500, 'convEps': 1e-2}
+    err = net.train(Xtrain, Xtarget, method = 'graddesc', error = errorFunc, show = 1, **optArgs)
+ 
     if verbose:
         print "Done Training."
 
-net = learnNN(verbose = True, nnStruct = [256, 50, 24], errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'Linf')
+net = learnNNbuff(verbose = True, nnStruct = [256, 50, 24], deltaTrain = 25, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'Linf')
 wstar = net.flattenWeights()
 
 # save optimal weights

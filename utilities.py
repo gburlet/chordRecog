@@ -38,3 +38,13 @@ def logsumexp(lnX, axis=0):
         lnXsum = lnXmax
 
     return lnXsum
+
+def unsqueeze(X, nDimDesired, axis=0):
+    '''
+    Helper function. Only expands if the the current number of dimensions
+    is less than the desired number of dimensions.
+    '''
+    if X.ndim < nDimDesired:
+        return np.expand_dims(X, axis=axis)
+    else:
+        return X
