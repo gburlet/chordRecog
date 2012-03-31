@@ -61,22 +61,17 @@ def learnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnStruc
             if not qObs[0] or cObs[0] != qObs[0]:
                 raise ValueError("Feature files out of sync")
             
+            # train the neural net with buffered features
+            if songNum > 0 and songNum % deltaTrain == 0:
+                trainNet(np.asarray(Xtrain), np.asarray(Xtarget), net, errorFunc, verbose)
+                # clear feature buffers
+                del Xtrain[:]
+                del Xtarget[:]
+
             songNum += 1
             
-            if songNum > 1:
-                eligibleTrain = True
-
             if verbose:
                 print "Processing song: ", cObs[0]
-
-        # train the neural net with buffered features
-        if eligibleTrain and songNum % deltaTrain == 0:
-            trainNet(np.asarray(Xtrain), np.asarray(Xtarget), net, errorFunc, verbose)
-            # clear feature buffers
-            del Xtrain[:]
-            del Xtarget[:]
-
-            eligibleTrain = False
 
         # double check features are in sync by timestamp
         if float(cObs[1]) != float(qObs[1]):
@@ -236,7 +231,7 @@ def trainNet(Xtrain, Xtarget, net, errorFunc, verbose = False):
     if verbose:
         print "Done Training."
 
-net = learnNNbuff(verbose = True, nnStruct = [256, 150, 50, 24], deltaTrain = 25, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'Linf')
+net = learnNNbuff(verbose = True, nnStruct = [256, 150, 50, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'Linf')
 wstar = net.flattenWeights()
 
 # save optimal weights
