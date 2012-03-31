@@ -4,13 +4,24 @@ import numpy as np
 Activation functions
 '''
 
+np.seterr(all='raise')
+
 class Sigmoid:
     ''' 
     Sigmoid activation function.
     '''   
     outputMinMax = [0.0, 1.0]
 
+    # from my tests: np.finfo(np.float64).max = 1.7976931348623157e+308
+    # and exp(a) < max, thus a < ln(max) => clamp on a should be < 709 to avoid overflow
+    clamp = 150
+
     def __call__(self, a):
+        # clamp values to avoid numerical overflow/underflow
+        a[a <= -self.clamp] = -self.clamp
+        a[a >= self.clamp] = self.clamp
+
+        # apply activation function to clipped network outputs 
         return 1.0 / (1.0 + np.exp(-a))
 
     def derivative(self, z):
@@ -51,15 +62,18 @@ class SoftMax:
 
     def __call__(self, a):
         if self._partition is None:
-            return np.exp(a) / np.sum(np.exp(a))
+            aMax = np.max(a)
+            return np.exp(a - aMax) / np.sum(np.exp(a - aMax))
         else:
             activation = np.zeros_like(a)
             pPart = 0
             for part in self._partition:
-                activation[pPart:part] = np.exp(a[pPart:part]) / np.sum(np.exp(a[pPart:part]))
+                aPartMax = np.max(a[pPart:part])
+                activation[pPart:part] = np.exp(a[pPart:part] - aPartMax) / np.sum(np.exp(a[pPart:part] - aPartMax))
                 pPart = part
             # now calculate softmax over last partition boundary to the end
-            activation[pPart:] = np.exp(a[pPart:]) / np.sum(np.exp(a[pPart:]))
+            aPartMax = np.max(a[pPart:])
+            activation[pPart:] = np.exp(a[pPart:] - aPartMax) / np.sum(np.exp(a[pPart:] - aPartMax))
 
             return activation
 

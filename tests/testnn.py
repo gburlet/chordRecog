@@ -24,16 +24,19 @@ ytrain = f(xtrain)
 # uses sigmoid activation function by default at each layer.
 net = nn.NeuralNet([1, 5, 1], actFunc=[act.Sigmoid(), act.Identity()])
 
+# hire a trainer for the network
+trainer = nn.Trainer(net, 'SSE', 25, xtrain, ytrain)
+
 # train using BFGS and sum of squares error
 optArgs = {'gtol': 1e-6, 'maxiter': 250}
-err = net.train(xtrain, ytrain, method='bfgs', error = 'SSE', show = 25, **optArgs)
+trainer.trainBFGS(**optArgs)
 
 # run the input through the network
 ytest = net.calcOutput(xtrain)
 
 # plot result
 pl.subplot(211)
-pl.plot(err)
+pl.plot(trainer.errHistory)
 pl.xlabel('Optimization Iteration')
 pl.ylabel('Error (SSE)')
 

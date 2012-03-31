@@ -5,7 +5,7 @@ import activation as act
 
 def learnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnStruct = [256, 150, 24], errorFunc = 'SSE', verbose = False):
     '''
-    Learns neural network weights with buffered feature input (batch training in segments). 
+    Learns neural network weights with buffered feature input (batch training in segments).
     Use this function when thrashing to disk is a possibility
 
     PARAMETERS
@@ -21,7 +21,7 @@ def learnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnStruc
     ------
     net: trained neural network
     '''
-
+    
     # initialize feature storage
     Xtrain = []     # Constant-Q transform
     Xtarget = []    # Bass and treble chromagram
@@ -44,6 +44,9 @@ def learnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnStruc
     # assumes full connectivity between layer neurons.
     net = nn.NeuralNet(nnStruct, actFunc=activations)
 
+    # hire a trainer for the network
+    trainer = nn.Trainer(net, errorFunc, 1)
+
     # read constant-q transform preliminary features
     qFile = open('data/logfreqspec.csv', 'r')
     # read bass and treble chromagram features
@@ -60,39 +63,30 @@ def learnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnStruc
             # check features are in sync by audio file path
             if not qObs[0] or cObs[0] != qObs[0]:
                 raise ValueError("Feature files out of sync")
-            
-            # train the neural net with buffered features
+                                    
+            # train the neural net with buffered features from the previous songs
             if songNum > 0 and songNum % deltaTrain == 0:
-                trainNet(np.asarray(Xtrain), np.asarray(Xtarget), net, errorFunc, verbose)
+                trainer.setData(np.asarray(Xtrain), np.asarray(Xtarget))
+                trainNet(trainer, verbose)
                 # clear feature buffers
                 del Xtrain[:]
                 del Xtarget[:]
 
             songNum += 1
-            
+
             if verbose:
                 print "Processing song: ", cObs[0]
-
+       
         # double check features are in sync by timestamp
         if float(cObs[1]) != float(qObs[1]):
             raise ValueError("Feature files out of sync")
         
-        # get Constant-Q transform
-        constantQ = np.asfarray(qObs[2:])
-        
-        # perform feature normalization
-        if constantQNorm is not None and np.sum(constantQ) != 0:
-            if constantQNorm == 'L1':
-                constantQ /= np.sum(np.abs(constantQ))
-            elif constantQNorm == 'L2':
-                constantQ /= np.sum(constantQ ** 2)
-            elif constantQNorm == 'Linf':
-                constantQ /= np.max(np.abs(constantQ))
-
-        Xtrain.append(constantQ)
-
         # get chromagrams
         chroma = np.asfarray(cObs[2:])
+
+        # avoid divide by zero (this is silence in audio)
+        if np.sum(chroma) == 0:
+            continue
 
         # perform feature normalization
         if chromaNorm == 'L1':
@@ -113,9 +107,24 @@ def learnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnStruc
 
         Xtarget.append(chroma)
 
+        # get Constant-Q transform
+        constantQ = np.asfarray(qObs[2:])
+        
+        # perform feature normalization
+        if constantQNorm is not None and np.sum(constantQ) != 0:
+            if constantQNorm == 'L1':
+                constantQ /= np.sum(np.abs(constantQ))
+            elif constantQNorm == 'L2':
+                constantQ /= np.sum(constantQ ** 2)
+            elif constantQNorm == 'Linf':
+                constantQ /= np.max(np.abs(constantQ))
+
+        Xtrain.append(constantQ)
+
     # train leftovers (< deltaTrain songs)
     if len(Xtrain) > 0:
-        trainNet(np.asarray(Xtrain), np.asarray(Xtarget), net, errorFunc, verbose)
+        trainer.setData(np.asarray(Xtrain), np.asarray(Xtarget))
+        trainNet(trainer, verbose)
 
     if verbose:
         print "Done training neural network."
@@ -204,7 +213,7 @@ def learnNN(chromaNorm = 'L1', constantQNorm = 'Linf', deltaTrain = 2, nnStruct 
 
     return net
 
-def trainNet(Xtrain, Xtarget, net, errorFunc, verbose = False):
+def trainNet(trainer, verbose = False):
     '''
     Train the neural net given the set of features.
 
@@ -215,25 +224,26 @@ def trainNet(Xtrain, Xtarget, net, errorFunc, verbose = False):
     '''
     
     if verbose:
-        iprint = 0
         print "Training ..."
-    else:
-        iprint = -1
 
     # l-bfgs-b
-    # optArgs = {'wBounds': (-100,100), 'm': len(Xtrain), 'factr': 1e7, 'pgtol': 1e-05, 'iprint': iprint, 'maxfun': 15000}
-    # err = net.train(Xtrain, Xtarget, method='l_bfgs_b', error = errorFunc, **optArgs)
+    iprint = 1 if verbose else 0
+    optArgs = {'bounds': (-10,10), 'm': 100, 'factr': 1e7, 'pgtol': 1e-05, 'iprint': iprint, 'maxfun': 15000}
+    trainer.trainL_BFGS_B(**optArgs)
     
-    # gradient descent
-    optArgs = {'eta': 1e-2, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
-    err = net.train(Xtrain, Xtarget, method = 'graddesc', error = errorFunc, show = 1, **optArgs)
+    # adaptive gradient descent
+    # optArgs = {'etaInit': 1e-2, 'etaInc': 1.1, 'etaDec': 0.5, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
+    # trainer.trainAdaptGradDesc(**optArgs)
+
+    #optArgs = {'eta': 1e-2, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
+    #trainer.trainGradDesc(**optArgs)
  
     if verbose:
         print "Done Training."
 
-net = learnNNbuff(verbose = True, nnStruct = [256, 150, 50, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'Linf')
+net = learnNNbuff(verbose = True, nnStruct = [256, 300, 200, 50, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = None)
 wstar = net.flattenWeights()
 
 # save optimal weights
-np.save('wstar.npy', wstar)
+np.save('wstar_adapt.npy', wstar)
 print "all done!"

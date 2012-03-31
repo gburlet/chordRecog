@@ -23,7 +23,11 @@ class KLDiv:
     '''
 
     def __call__(self, output, target):
-        return np.sum(target * np.log(target / output))
+        # avoid divide by zero
+        target[target == 0] = 1e-12
+        return -np.sum(target * (np.log(output / target)))
 
     def derivative(self, output, target):
-        return output / target
+        # avoid divide by zero
+        output[output == 0] = 1e-12
+        return -(target / output)

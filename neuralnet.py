@@ -124,106 +124,6 @@ class NeuralNet():
             numW += l.w.size
         return numW   
 
-    def train(self, Xtrain, Ytrain, method='bfgs', errorFunc='SSE', show=25, **args):
-        '''
-        Train the neural network using the Broyden-Fletcher-Goldfarb-Shanno algorithm
-
-        PARAMETERS
-        ----------
-        Xtrain {T,D}: training input data, T points of dimensionality D
-        Ytrain {T,D}: training target data, T points of dimensionality D
-        method {String}: training method
-                Quasi-Newton method of Broyden, Fletcher, Goldfarb, and Shanno: 'bfgs'
-                Bounded, limited memory BFGS (use for large networks): 'l_bfgs_b'
-                Sequential Gradient Descent: 'graddesc'
-                Default: 'bfgs'
-        errorFunc {String}: error function
-                Sum of squared errors: 'SSE'
-                Kullback-Leibler Divergence: 'KLDiv'
-                Default: 'SSE'
-        show {Int}: number of iterations to pass before printing status (not enabled for l_bfgs_b)
-
-        args:
-            BFGS
-            ----
-            maxiter {Int}: maximum number of training iterations
-            gtol {Float}: gradient the norm must be less than before succesful termination
-            
-            L-BFGS-B
-            --------
-            wBounds {Int,Int}: bounds on each weight parameter as tuple (min,max), default: None
-            m {Int}: number of terms to approximate the hessian
-                Default: 10
-            factr {Float}: scalar to control number of iterations.
-                Low accuracy: 1e12
-                Moderate accuracy: 1e7
-                High accuracy: 10.0
-                Default: 1e7
-            pgtol {Float}: iteration stops when max(grad) <= pgtol
-                Default: 1e-05
-            iprint {Int}: frequency of output
-                silent: -1
-                print to stdout: 0
-                print to file named iterate.dat in pwd: 1
-                Default: -1
-            maxfun {Int}: maximum number of function evaluations
-                Default: 15000
-
-            GRADIENT DESCENT
-            ----------------
-            eta {float}: learning rate
-                Default: 1e-2
-            sequential {Boolean}: use sequential or batch training
-                Default: sequential
-            maxiter {Int}: maximum number of training iterations
-                Default: 1000
-            convEps {Float}: convergence criterion (when to stop iterating)
-        '''
-        
-        trainer = Trainer(self, unsqueeze(Xtrain,2), unsqueeze(Ytrain,2), errorFunc, show)
-
-        if method == "bfgs":
-            # sanitize arguments to optimization function
-            optArgs = {}
-            if "maxiter" in args:
-                optArgs["maxiter"] = args["maxiter"]
-            if "gtol" in args:
-                optArgs["gtol"] = args["gtol"]
-
-            return trainer.trainBFGS(**optArgs)
-        elif method == "l_bfgs_b":
-            # sanitize arguments to optimization function
-            optArgs = {}
-            if "wBounds" in args:
-                optArgs["bounds"] = [args["wBounds"]] * self._numWeights()
-            if "m" in args:
-                optArgs["m"] = args["m"]
-            if "factr" in args:
-                optArgs["factr"] = args["factr"]
-            if "pgtol" in args:
-                optArgs["pgtol"] = args["pgtol"]
-            if "iprint" in args:
-                optArgs["iprint"] = args["iprint"]
-            if "maxfun" in args:
-                optArgs["maxfun"] = args["maxfun"]
-
-            return trainer.trainL_BFGS_B(**optArgs)
-        elif method == "graddesc":
-            # sanitize arguments to optimization function
-            optArgs = {}
-            if "eta" in args:
-                optArgs["eta"] = args["eta"]
-            if "sequential" in args:
-                optArgs["sequential"] = args["sequential"]
-            if "maxiter" in args:
-                optArgs["maxiter"] = args["maxiter"]
-            if "convEps" in args:
-                optArgs["convEps"] = args["convEps"]
-
-            return trainer.trainGradDesc(**optArgs)
-        else:
-            raise NotImplementedError("This training method has not been implemented yet")
-
 class Layer():
     '''
     Creates a single perceptron layer of a feedforward neural network
@@ -277,13 +177,16 @@ class Trainer():
     Trainer for the neural network.
     '''
 
-    def __init__(self, net, Xtrain, Ytrain, errorFunc, show):
+    def __init__(self, net, errorFunc, show, Xtrain = None, Ytrain = None):
         self._net = net
         self.train = Xtrain
         self.target = Ytrain
         self._show = show
         self._err = 0.0
         self._iter = 0
+
+        # for gradient descent algorithms
+        self._eta = None
 
         # set error function
         if errorFunc == 'SSE':
@@ -298,7 +201,14 @@ class Trainer():
 
         # roll out all network weights as initial guess for optimization function
         # **careful** change this vector -> change network weights
-        self._w = net.flattenWeightsRef()
+        self._w = self._net.flattenWeightsRef()
+
+    def setData(self, Xtrain, Ytrain):
+        self.train = unsqueeze(Xtrain,2)
+        self.target = unsqueeze(Ytrain,2)
+
+    def clearMemory(self):
+        del self.errHistory[:]
 
     def _objFunc(self, w):
         '''
@@ -390,7 +300,18 @@ class Trainer():
 
         self._iter += 1
         
-    def trainGradDesc(self, eta = 1e-2, convEps = 1e-5, maxiter = 250, sequential = True):
+    def trainGradDesc(self, eta = 1e-2, convEps = 1e-5, maxiter = 25, sequential = True):
+        '''
+        GRADIENT DESCENT
+        ----------------
+        eta {float}: learning rate
+            Default: 1e-2
+        sequential {Boolean}: use sequential or batch training
+            Default: sequential
+        maxiter {Int}: maximum number of training iterations
+            Default: 1000
+        convEps {Float}: convergence criterion (when to stop iterating)
+        '''
         T = len(self.train)
 
         if sequential:
@@ -410,9 +331,130 @@ class Trainer():
                 if abs(prevErr - self._err) < convEps:
                     break
 
+                prevErr = self._err
+
+        return self.errHistory
+
+    '''
+    check error and modify eta after each observation
+    def trainAdaptGradDesc(self, etaInit = 1e-2, etaInc = 1.1, etaDec = 0.5, convEps = 1e-5, maxiter = 25, sequential = True):
+        T = len(self.train)
+        eta = etaInit
+
+        if sequential:
+            prevErr = np.inf
+            wCache = self._w.copy()
+
+            # for each training iteration
+            for tind in xrange(maxiter):
+                # train one-by-one
+                for i in xrange(T):
+                    #print "obs: ", i
+                    errDec = False
+                    while not errDec:
+                        # calculate weight gradients and update
+                        self._w[:] -= eta * self._jacObjFunc(self._w, trainInd = i)
+
+                        # calculate error over all training points
+                        if self._objFunc(self._w) < prevErr:
+                            # all good, increase the learning rate
+                            eta *= etaInc
+                            wCache = self._w.copy()
+                            errDec = True
+                            prevErr = self._err
+                            #print "+eta: ", eta
+                        else:
+                            # rollback and start again with decreased learning rate
+                            self._w[:] = wCache
+                            eta *= etaDec
+                            #print "-eta: ", eta
+
+                            if eta < 1e-6:
+                                print "eta hit lower bound, resetting ..."
+                                eta = 1e-3
+                                break
+
+                self._optCallback(None, log = True)
+
+                # check termination conditions satisfied
+                if abs(prevErr - self._err) < convEps:
+                    break
+
+        return self.errHistory
+    '''
+    
+    def trainAdaptGradDesc(self, etaInit = 1e-2, etaInc = 1.1, etaDec = 0.5, convEps = 1e-5, maxiter = 25, sequential = True):
+        '''
+        ADAPTIVE GRADIENT DESCENT
+        -------------------------
+        eta {float}: learning rate
+            Default: 1e-2
+        etaInc {float}: ratio to increase learning rate (> 1)
+            Default: 1.1
+        etaDec {float}: ratio to decrease learning rate (< 1)
+            Default: 0.5
+        sequential {Boolean}: use sequential or batch training
+            Default: sequential
+        maxiter {Int}: maximum number of training iterations
+            Default: 1000
+        convEps {Float}: convergence criterion (when to stop iterating)
+
+        Check error and modify eta after each batch of training data.
+        '''
+        T = len(self.train)
+        
+        if self._eta is None:
+            self._eta = etaInit
+
+        if sequential:
+            wCache = self._w.copy()
+            prevIterErr = np.inf
+
+            # for each training iteration
+            for tind in xrange(maxiter):
+                errDec = False
+                while not errDec:
+                    # train one-by-one
+                    for i in xrange(T):
+                        # calculate weight gradients and update
+                        self._w[:] -= self._eta * self._jacObjFunc(self._w, trainInd = i)
+
+                    # calculate error over all training points
+                    prevErr = self.errHistory[-1] if len(self.errHistory) > 0 else np.inf
+                    print "this Err: ", self._objFunc(self._w)/len(self.train), ", prev err: ", prevErr
+                    if self._err / len(self.train) < prevErr:
+                        # all good, increase the learning rate
+                        self._eta *= etaInc
+                        errDec = True
+                        print "+eta: ", self._eta
+                    else:
+                        # rollback and start again with decreased learning rate
+                        self._w[:] = wCache
+                        self._eta *= etaDec
+                        print "-eta: ", self._eta
+
+                        if self._eta < 1e-6:
+                            print "eta hit lower bound, resetting ..."
+                            self._eta = 1e-3
+                            break
+
+                self._optCallback(None, log = True)
+
+                # check termination conditions satisfied
+                if abs(prevIterErr - self._err) < convEps:
+                    break
+
+                prevIterErr = self._err
+
         return self.errHistory
                 
     def trainBFGS(self, **optArgs):
+        '''
+        BFGS
+        ----
+        maxiter {Int}: maximum number of training iterations
+        gtol {Float}: gradient the norm must be less than before succesful termination
+        '''
         wstar = fmin_bfgs(self._objFunc, self._w.copy(), fprime = self._jacObjFunc, callback = self._optCallback, **optArgs)        
         
         # set the optimal weights
@@ -421,6 +463,29 @@ class Trainer():
         return self.errHistory
 
     def trainL_BFGS_B(self, **optArgs):
+        '''
+        L-BFGS-B
+        --------
+        bounds (Int,Int): bounds on each weight parameter as tuple (min,max), default: None
+        m {Int}: number of terms to approximate the hessian
+            Default: 10
+        factr {Float}: scalar to control number of iterations.
+            Low accuracy: 1e12
+            Moderate accuracy: 1e7
+            High accuracy: 10.0
+            Default: 1e7
+        pgtol {Float}: iteration stops when max(grad) <= pgtol
+            Default: 1e-05
+        iprint {Int}: frequency of output
+            silent: -1
+            print to stdout: 0
+            print to file named iterate.dat in pwd: 1
+            Default: -1
+        maxfun {Int}: maximum number of function evaluations
+            Default: 15000
+        '''
+
+        optArgs["bounds"] = [optArgs["bounds"]] * len(self._w)
         wstar, finalErr, d = fmin_l_bfgs_b(self._objFunc, self._w.copy(), fprime=self._jacObjFunc, **optArgs)
 
         if d["warnflag"] == 0:
