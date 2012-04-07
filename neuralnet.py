@@ -210,7 +210,7 @@ class Trainer():
     def clearMemory(self):
         del self.errHistory[:]
 
-    def _objFunc(self, w):
+    def _objFunc(self, w, trainInd = None):
         '''
         The objective function.
 
@@ -321,7 +321,7 @@ class Trainer():
                 # train one-by-one
                 for i in xrange(T):
                     # calculate weight gradients and update
-                    self._w[:] -= eta * self._jacObjFunc(self._w, trainInd = i)
+                    self._w[:] -= eta * self._jacObjFunc(self._w, i)
 
                 # calculate error over all training points
                 self._objFunc(self._w)
@@ -421,7 +421,6 @@ class Trainer():
 
                     # calculate error over all training points
                     prevErr = self.errHistory[-1] if len(self.errHistory) > 0 else np.inf
-                    print "this Err: ", self._objFunc(self._w)/len(self.train), ", prev err: ", prevErr
                     if self._err / len(self.train) < prevErr:
                         # all good, increase the learning rate
                         self._eta *= etaInc
@@ -435,7 +434,7 @@ class Trainer():
 
                         if self._eta < 1e-6:
                             print "eta hit lower bound, resetting ..."
-                            self._eta = 1e-3
+                            self._eta = etaInit
                             break
 
                 self._optCallback(None, log = True)

@@ -227,21 +227,21 @@ def trainNet(trainer, verbose = False):
         print "Training ..."
 
     # l-bfgs-b
-    iprint = 1 if verbose else 0
-    optArgs = {'bounds': (-10,10), 'm': 100, 'factr': 1e7, 'pgtol': 1e-05, 'iprint': iprint, 'maxfun': 15000}
-    trainer.trainL_BFGS_B(**optArgs)
+    #iprint = 1 if verbose else 0
+    #optArgs = {'bounds': (-10,10), 'm': 100, 'factr': 1e7, 'pgtol': 1e-05, 'iprint': iprint, 'maxfun': 15000}
+    #trainer.trainL_BFGS_B(**optArgs)
     
     # adaptive gradient descent
     # optArgs = {'etaInit': 1e-2, 'etaInc': 1.1, 'etaDec': 0.5, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
     # trainer.trainAdaptGradDesc(**optArgs)
 
-    #optArgs = {'eta': 1e-2, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
-    #trainer.trainGradDesc(**optArgs)
+    optArgs = {'eta': 1e-2, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
+    trainer.trainGradDesc(**optArgs)
  
     if verbose:
         print "Done Training."
 
-net = learnNNbuff(verbose = True, nnStruct = [256, 300, 200, 50, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = None)
+net = learnNNbuff(verbose = True, nnStruct = [256, 150, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = None)
 wstar = net.flattenWeights()
 
 # save optimal weights

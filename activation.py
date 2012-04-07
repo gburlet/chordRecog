@@ -1,4 +1,5 @@
 import numpy as np
+from utilities import logsumexp
 
 '''
 Activation functions
@@ -47,6 +48,10 @@ class SoftMax:
     '''
     outputMinMax = [0.0, 1.0]
 
+    # from my tests: np.finfo(np.float64).max = 1.7976931348623157e+308
+    # and exp(a) < max, thus a < ln(max) => clamp on a should be < 709 to avoid overflow
+    clamp = 150
+
     def __init__(self, partition = None):
         '''
         Initializes the activation function with the ability to partition output nodes
@@ -68,12 +73,18 @@ class SoftMax:
             activation = np.zeros_like(a)
             pPart = 0
             for part in self._partition:
-                aPartMax = np.max(a[pPart:part])
-                activation[pPart:part] = np.exp(a[pPart:part] - aPartMax) / np.sum(np.exp(a[pPart:part] - aPartMax))
+                lnAct = a[pPart:part] - logsumexp(a[pPart:part])
+                # clamp values to avoid numerical overflow/underflow
+                lnAct[lnAct <= -self.clamp] = -self.clamp
+                lnAct[lnAct >= self.clamp] = self.clamp
+                activation[pPart:part] = np.exp(lnAct)
                 pPart = part
             # now calculate softmax over last partition boundary to the end
-            aPartMax = np.max(a[pPart:])
-            activation[pPart:] = np.exp(a[pPart:] - aPartMax) / np.sum(np.exp(a[pPart:] - aPartMax))
+            lnAct = a[pPart:] - logsumexp(a[pPart:])
+            # clamp values to avoid numerical overflow/underflow
+            lnAct[lnAct <= -self.clamp] = -self.clamp
+            lnAct[lnAct >= self.clamp] = self.clamp
+            activation[pPart:] = np.exp(lnAct)
 
             return activation
 
