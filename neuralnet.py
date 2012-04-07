@@ -210,7 +210,7 @@ class Trainer():
     def clearMemory(self):
         del self.errHistory[:]
 
-    def _objFunc(self, w, trainInd = None):
+    def _objFunc(self, w):
         '''
         The objective function.
 
