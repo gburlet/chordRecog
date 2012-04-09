@@ -108,6 +108,47 @@ class GHMM:
     CLASS METHODS
     -------------
     '''
+    def baumWelch(self, O, init = 'pa', update = 'pab', maxIter = 10, convEps = 0.01, verbose = False):
+        '''
+        Estimates the model parameters using the classic Baum-Welch expectation maximization algorithm
+
+        PARAMETERS
+        ----------
+        [O {TxD}]: list of observation matrices with a sequence of T observations, each having dimension D
+        init: p - init pi, a - init transitions, b - init emissions
+        update: p - update pi, a - update transitions, b - update emissions
+        maxIter: maximum number of iterations to run the EM algorithm
+        convEps: convergence threshold
+        verbose: print progress
+        '''
+
+        # init params
+        if 'p' in init:
+            self._setPi(np.ones((1, self.N)) / self.N)
+    
+        if 'a' in init:
+            aRand = np.random.rand(self.N, self.N)
+            aRand / aRand.sum(axis=1)[:,np.newaxis]
+            self._setA(aRand)
+
+        lnP_history = []
+        for i in range(maxIter):
+            lnP_curr = 0
+            for o in O:
+                lnP, lnAlpha = self._forward(o)
+                lnBeta = self._backward(o)
+                lnGamma = lnAlpha + lnBeta - lnP
+
+                lnP_curr += lnP
+
+                
+            lnP_history.append(lnP_curr)
+
+            # check convergence criterion
+            if i > 0 and abs(lnP_history[-1] - lnP_history[-2]) < convEps:
+                break
+        
+    # TODO: SCALING
     def _forward(self, O):
         '''
         Calculates the forward variable, alpha: the probability of the partial observation
@@ -152,6 +193,7 @@ class GHMM:
 
         return lnP, lnAlpha
 
+    # TODO: SCALING by same coefficients as alpha
     def _backward(self, O):
         '''
         Calculates the backward variable, beta: the probability of the partial observation 
@@ -164,7 +206,7 @@ class GHMM:
         RETURNS
         -------
         lnBeta {T,N}: log of the backward variable: the probability of the partial observation 
-        sequence 0T OT-1 ... Ot+1 (backwards to time t+1) and State Si at time t+1
+                      sequence 0T OT-1 ... Ot+1 (backwards to time t+1) and State Si at time t+1
         '''
         
         T, D = O.shape
@@ -252,3 +294,32 @@ class GHMM:
             qstar = [self._labels[q] for q in qstar]
         
         return pstar, qstar
+
+    def derivOptCrit(self, O):
+        '''
+        PARAMETERS
+        ----------
+        O {TxD}: observation matrix with a sequence of T observations, each having dimension D
+
+        RETURNS
+        -------
+        dC / dy {TxD}: derivative of the optimization criterion for each observation
+        '''
+
+        T, D = O.shape
+
+        lnAlpha = self._forward(O)[1]
+        lnBeta = self._backward(O)
+
+        # calculate lnP for each observation for each state's emission distribution
+        # lnP_obs {T, N}
+        lnP_obs = np.zeros([T,self.N])
+        for i in range(0,self.N):
+            lnP_obs[:,i] = self._B[i].calcLnP(O)
+
+        # calculate derivative of the optimization criterion for each observation for each state's emission distribution
+        dlnP = np.zeros([T,self.N,D])
+        for i in range(0,self.N):
+            dlnP[:,i,:] = self._B[i].calcDerivLnP(O)
+
+        return np.exp(logsumexp((lnBeta + lnAlpha - lnP_obs)[:,:,np.newaxis] + dlnP, axis=1))
