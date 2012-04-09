@@ -25,6 +25,7 @@ class KLDiv:
     def __call__(self, output, target):
         # avoid divide by zero
         target[target == 0] = 1e-5
+        output[output == 0] = 1e-5
         return -np.sum(target * (np.log(output / target)))
 
     def derivative(self, output, target):
