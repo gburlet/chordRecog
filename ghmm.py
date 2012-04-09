@@ -148,8 +148,7 @@ class GHMM:
             if i > 0 and abs(lnP_history[-1] - lnP_history[-2]) < convEps:
                 break
         
-    # TODO: SCALING
-    def _forward(self, O):
+    def _forward(self, O, scale = True):
         '''
         Calculates the forward variable, alpha: the probability of the partial observation
         sequence O1 O2 ... Ot (until time t) and state Si at time t.
@@ -157,12 +156,14 @@ class GHMM:
         PARAMETERS
         ----------
         O {TxD}: observation matrix with a sequence of T observations, each having dimension D
+        scale {Boolean}: default True
         
         RETURNS
         -------
         lnP {Float}: log probability of the observation sequence O
         lnAlpha {T,N}: log of the forward variable: the probability of the partial observation
                        sequence O1 O2 ... Ot (until time t) and state Si at time t.
+        c (T,): scaling coefficients
         '''
 
         T, D = O.shape
@@ -181,20 +182,32 @@ class GHMM:
         # forward variable, alpha {T,N}
         lnAlpha = np.zeros([T,self.N])
 
+        # initialize vector of scaling coefficients
+        lnC = np.zeros(T)
+
         # Step 1: Initialization
         lnAlpha[0,:] = np.log(self._pi) + lnP_obs[0,:]
-
+        if scale:
+            lnC[0] = -logsumexp(lnAlpha[0,:])
+            lnAlpha[0,:] += lnC[0]
+            
         # Step 2: Induction
         for t in range(1,T-1):
-            ln_alpha[t,:] = logsumexp(lnAlpha[[t-1],:].T + np.log(self._A), axis=0) + lnP_obs[t,:]
+            lnAlpha[t,:] = logsumexp(lnAlpha[[t-1],:].T + np.log(self._A), axis=0) + lnP_obs[t,:]
+            if scale:
+                lnC[t] = -logsumexp(lnAlpha[0,:])
+                lnAlpha[t,:] += lnC[t]
 
         # Step 3: Termination
-        lnP = logsumexp(lnAlpha[T,:])
+        if scale:
+            lnP = -np.sum(lnC)
+        else:
+            lnP = logsumexp(lnAlpha[T,:])
 
-        return lnP, lnAlpha
+        return lnP, lnAlpha, lnC
 
     # TODO: SCALING by same coefficients as alpha
-    def _backward(self, O):
+    def _backward(self, O, lnC):
         '''
         Calculates the backward variable, beta: the probability of the partial observation 
         sequence 0T OT-1 ... Ot+1 (backwards to time t+1) and State Si at time t+1
