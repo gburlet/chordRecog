@@ -3,7 +3,7 @@ import activation as act
 import error
 from utilities import unsqueeze
 from itertools import izip
-from scipy.optimize import fmin_bfgs, fmin_l_bfgs_b
+from scipy.optimize import fmin_bfgs, fmin_l_bfgs_b, check_grad, approx_fprime
 
 class NeuralNet():
     '''
@@ -233,17 +233,21 @@ class Trainer():
         
         return self._err
 
-    def _jacObjFunc(self, w, trainInd = None):
+    def _jacObjFunc(self, w, trainInd = None, deltaOver = None):
         '''
         Calculates the jacobian of the objective function using backpropagation
 
         PARAMETERS
         ----------
         w: flattened vector of network weights at a given iteration
+        trainInd {Int}: use only one training/target point for jacobian calculation
+            Default: None => derivative of weights wrt. all data points in memory
+        deltaOver {TxK}: matrix of output errors to backpropagate (overrides standard error calculations)
+            Default: None => use standard error calculations on output neurons
 
         RETURNS
         -------
-        delta: vector with length equal to the number of weights in the network. 
+        jacob: vector with length equal to the number of weights in the network. 
                Each element is d(E)/d(w_ji) = d(E)/d(a_j) * d(a_j)/d(w_ji)
         '''
         # update network weights
@@ -256,16 +260,19 @@ class Trainer():
         target = self.target if trainInd is None else self.target[[trainInd],:]
 
         # sum gradients over all input points
-        for inPoint, targPoint in izip(train, target):
+        for i, (inPoint, targPoint) in enumerate(izip(train, target)):
             # run the input data through the neural net
             # outPoint {1xK}
             outPoint = self._net.calcOutput(inPoint[np.newaxis,:])
 
-            jInd = w.size
             # calculate delta at the output neurons
             lLayer = self._net.layers[-1]
-            delta = self._errorFunc.derivative(outPoint, targPoint) * lLayer.actFunc.derivative(outPoint)
-            delta = delta.T
+            if deltaOver is None:
+                delta = (self._errorFunc.derivative(outPoint, targPoint) * lLayer.actFunc.derivative(outPoint)).T
+            else:
+                delta = deltaOver[[i],:].T
+
+            jInd = w.size
             for lInd in reversed(range(self._net.N)):
                 l = self._net.layers[lInd]
                 numW = l.w.size
@@ -314,6 +321,10 @@ class Trainer():
         '''
         T = len(self.train)
 
+        #print "testing jacobian ..."
+        #print "all close? ", np.allclose(0, check_grad(self._objFunc, self._jacObjFunc, self._w.copy()))
+        #print "done."
+
         if sequential:
             prevErr = np.inf
             # for each training iteration
@@ -322,6 +333,7 @@ class Trainer():
                 for i in xrange(T):
                     # calculate weight gradients and update
                     self._w[:] -= eta * self._jacObjFunc(self._w, i)
+                    #self._w[:] -= eta * approx_fprime(self._w.copy(), self._objFunc, 1e-5)
 
                 # calculate error over all training points
                 self._objFunc(self._w)
