@@ -163,7 +163,7 @@ class GHMM:
         lnP {Float}: log probability of the observation sequence O
         lnAlpha {T,N}: log of the forward variable: the probability of the partial observation
                        sequence O1 O2 ... Ot (until time t) and state Si at time t.
-        c (T,): scaling coefficients
+        lnC (T,): log of the scaling coefficients for each observation
         '''
 
         T, D = O.shape
@@ -206,7 +206,6 @@ class GHMM:
 
         return lnP, lnAlpha, lnC
 
-    # TODO: SCALING by same coefficients as alpha
     def _backward(self, O, lnC):
         '''
         Calculates the backward variable, beta: the probability of the partial observation 
@@ -215,6 +214,7 @@ class GHMM:
         PARAMETERS
         ----------
         O {TxD}: observation matrix with a sequence of T observations, each having dimension D
+        lnC (T,): log of the scaling coefficients for each observation calculated from the forward pass
         
         RETURNS
         -------
@@ -238,11 +238,11 @@ class GHMM:
         # backward variable, beta {T,N}
         # Step 1: Initialization
         # since ln(1) = 0
-        lnBeta = np.zeros([T,self.N])
+        lnBeta = np.zeros([T,self.N]) + lnC
 
         # Step 2: Induction
         for t in reversed(range(0,T-1)):
-            lnBeta[t,:] = logsumexp(np.log(self._A) + lnP_obs[t+1,:] + lnBeta[t+1,:], axis=1)
+            lnBeta[t,:] = logsumexp(np.log(self._A) + lnP_obs[t+1,:] + lnBeta[t+1,:], axis=1) + lnC
 
         return lnBeta
 
