@@ -272,7 +272,7 @@ class GMM:
         '''
 
         N, _ = X.shape
-        lnP_Xi_l = np.zeros((N, self.M))
+        lnP_Xi_l = np.zeros([N, self.M])
 
         # zero correction
         self._Sigma[self._Sigma == 0.0] += self._zeroCorr
@@ -357,6 +357,63 @@ class GMM:
         
         lnP, _ = self._expect(X)
         return lnP
+
+    def calcDerivLnP(self, X):
+        '''
+        Calculate the partial derivative of the ln probability of the given observations under the model
+        with respect to the observations.
+
+        PARAMETERS
+        ----------
+        X {NxD}: observations
+
+        RETURNS
+        -------
+        lnP_deriv (N,D)
+        '''
+
+        N, _ = X.shape
+        lnP_Xi_l = np.zeros([N, self.D, self.M])
+
+        # zero correction
+        self._Sigma[self._Sigma == 0.0] += self._zeroCorr
+
+        # for each mixture component
+        for l in range(0,self.M):
+            X_mu = X - self._mu[l,:]
+            mu_X = self._mu[l,:] - X
+
+            if self.covType == 'diag':
+                sig_l = np.diag(self._Sigma[l,:,:]) # (D,)
+                lnP_Xi_l[:,:,l] = (-0.5 * (self.D * np.log(2.0*np.pi) + np.sum((X_mu ** 2) / sig_l, axis=1) + np.sum(np.log(sig_l))) +
+                                  np.log(mu_X/sig_l))
+            elif self.covType == 'full':
+                try:
+                    # cholesky decomposition => U*U.T = _Sigma[l,:,:]
+                    L = slinalg.cholesky(self._Sigma[l,:,:], lower=True)
+                except slinalg.LinAlgError:
+                    # reinitialization trick is from scikit learn GMM
+                    if verbose:
+                        print "Sigma is not positive definite. Reinitializing ..."
+                    self._Sigma[l,:,:] = 1e-6 * np.eye(self.D)
+                    L = 1000.0 * self._Sigma[l,:,:]
+                    
+                # solve LQ=X_mu
+                Q = slinalg.solve_triangular(L, X_mu.T, lower=True)
+
+                # solve Lx=I for L^-1
+                invL = slinalg.solve_triangular(L, np.eye(self.D), lower=True)
+                invSig = np.dot(invL.T, invL)
+                
+                lnP_Xi_l[:,:,l] = (-0.5 * (self.D * np.log(2.0 * np.pi) + 2.0 * np.sum(np.log(np.diag(L))) + np.sum(Q ** 2, axis=0))[:,np.newaxis] +
+                                  np.log(np.dot(mu_X, invSig)))
+
+        lnP_Xi_l += self._lnw
+        
+        # calculate sum of probabilities (marginalizing over mixtures)
+        lnP_deriv = logsumexp(lnP_Xi_l, axis=2)
+
+        return lnP_deriv
 
     def _processCov(self, Cov):
         ''' 
