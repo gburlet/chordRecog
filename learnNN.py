@@ -228,22 +228,28 @@ def trainNet(trainer, verbose = False):
 
     # l-bfgs-b
     #iprint = 1 if verbose else 0
-    #optArgs = {'bounds': (-10,10), 'm': 100, 'factr': 1e7, 'pgtol': 1e-05, 'iprint': iprint, 'maxfun': 15000}
+    #optArgs = {'bounds': None, 'm': 100, 'factr': 1e7, 'pgtol': 1e-05, 'iprint': iprint, 'maxfun': 15000}
     #trainer.trainL_BFGS_B(**optArgs)
     
     # adaptive gradient descent
-    # optArgs = {'etaInit': 1e-2, 'etaInc': 1.1, 'etaDec': 0.5, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
-    # trainer.trainAdaptGradDesc(**optArgs)
+    #optArgs = {'etaInit': 1e-2, 'etaInc': 1.1, 'etaDec': 0.5, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
+    #trainer.trainAdaptGradDesc(**optArgs)
 
-    optArgs = {'eta': 1e-2, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
-    trainer.trainGradDesc(**optArgs)
+    #optArgs = {'eta': 1e-5, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
+    #trainer.trainGradDesc(**optArgs)
+
+    optArgs = {'etaInit': 1e-5, 'etaInc': 1.11111111111, 'etaDec': 0.9, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
+    trainer.trainIndivAdaptGradDesc(**optArgs)
  
     if verbose:
         print "Done Training."
 
-net = learnNNbuff(verbose = True, nnStruct = [256, 150, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = None)
+# good nn structures:
+# 250, 150, 50
+
+net = learnNNbuff(verbose = True, nnStruct = [256, 200, 100, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = None)
 wstar = net.flattenWeights()
 
 # save optimal weights
-np.save('wstar_adapt.npy', wstar)
+np.save('wstar_indivadapt_200_100.npy', wstar)
 print "all done!"

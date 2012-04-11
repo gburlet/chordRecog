@@ -210,7 +210,7 @@ class Trainer():
     def clearMemory(self):
         del self.errHistory[:]
 
-    def _objFunc(self, w):
+    def _objFunc(self, w, trainInd = None):
         '''
         The objective function.
 
@@ -226,10 +226,13 @@ class Trainer():
         self._w[:] = w
 
         # first run the input data through the neural net
-        output = self._net.calcOutput(self.train)
+        # shouldn't slow down batch training, since it will just copy a reference in this case
+        train = self.train if trainInd is None else self.train[[trainInd],:]
+        target = self.target if trainInd is None else self.target[[trainInd],:]
+        output = self._net.calcOutput(train)
 
         # now calculate error
-        self._err = self._errorFunc(output, self.target)
+        self._err = self._errorFunc(output, target)
         
         return self._err
 
@@ -347,45 +350,42 @@ class Trainer():
 
         return self.errHistory
 
-    '''
-    check error and modify eta after each observation
-    def trainAdaptGradDesc(self, etaInit = 1e-2, etaInc = 1.1, etaDec = 0.5, convEps = 1e-5, maxiter = 25, sequential = True):
+    # check error and modify eta after each observation
+    def trainIndivAdaptGradDesc(self, etaInit = 1e-2, etaInc = 1.1, etaDec = 0.5, convEps = 1e-5, maxiter = 25, sequential = True):
         T = len(self.train)
-        eta = etaInit
+
+        if self._eta is None:
+            self._eta = etaInit
 
         if sequential:
-            prevErr = np.inf
-            wCache = self._w.copy()
-
             # for each training iteration
             for tind in xrange(maxiter):
                 # train one-by-one
                 for i in xrange(T):
-                    #print "obs: ", i
-                    errDec = False
-                    while not errDec:
+                    prevErr = self._objFunc(self._w, trainInd = i)
+                    wCache = self._w.copy()
+                    decErr = False
+                    while not decErr:
                         # calculate weight gradients and update
-                        self._w[:] -= eta * self._jacObjFunc(self._w, trainInd = i)
+                        grad = self._jacObjFunc(self._w, trainInd = i)
+                        self._w[:] -= self._eta * grad
 
-                        # calculate error over all training points
-                        if self._objFunc(self._w) < prevErr:
+                        # calculate error of current training point
+                        if self._objFunc(self._w, trainInd = i) < prevErr + 1e-5:
                             # all good, increase the learning rate
-                            eta *= etaInc
-                            wCache = self._w.copy()
-                            errDec = True
-                            prevErr = self._err
-                            #print "+eta: ", eta
+                            self._eta *= etaInc
+                            decErr = True
                         else:
-                            # rollback and start again with decreased learning rate
+                            # rollback weights and decrease learning rate, run again
                             self._w[:] = wCache
-                            eta *= etaDec
-                            #print "-eta: ", eta
-
-                            if eta < 1e-6:
-                                print "eta hit lower bound, resetting ..."
-                                eta = 1e-3
-                                break
-
+                            self._eta *= etaDec
+                    
+                print "|gradient|", np.linalg.norm(grad)
+                print "eta: ", self._eta 
+                
+                # calculate error wrt. whole data set in memory
+                self._objFunc(self._w)
+                # print error
                 self._optCallback(None, log = True)
 
                 # check termination conditions satisfied
@@ -393,7 +393,6 @@ class Trainer():
                     break
 
         return self.errHistory
-    '''
     
     def trainAdaptGradDesc(self, etaInit = 1e-2, etaInc = 1.1, etaDec = 0.5, convEps = 1e-5, maxiter = 25, sequential = True):
         '''
@@ -419,35 +418,30 @@ class Trainer():
             self._eta = etaInit
 
         if sequential:
-            wCache = self._w.copy()
+            #wCache = self._w.copy()
             prevIterErr = np.inf
 
             # for each training iteration
             for tind in xrange(maxiter):
-                errDec = False
-                while not errDec:
-                    # train one-by-one
-                    for i in xrange(T):
-                        # calculate weight gradients and update
-                        self._w[:] -= self._eta * self._jacObjFunc(self._w, trainInd = i)
+                # train one-by-one
+                for i in xrange(T):
+                    # calculate weight gradients and update
+                    grad = self._jacObjFunc(self._w, trainInd = i)
+                    self._w[:] -= self._eta * grad
 
-                    # calculate error over all training points
-                    prevErr = self.errHistory[-1] if len(self.errHistory) > 0 else np.inf
-                    if self._err / len(self.train) < prevErr:
-                        # all good, increase the learning rate
-                        self._eta *= etaInc
-                        errDec = True
-                        print "+eta: ", self._eta
-                    else:
-                        # rollback and start again with decreased learning rate
-                        self._w[:] = wCache
-                        self._eta *= etaDec
-                        print "-eta: ", self._eta
+                print "|gradient|: ", np.linalg.norm(grad)
 
-                        if self._eta < 1e-6:
-                            print "eta hit lower bound, resetting ..."
-                            self._eta = etaInit
-                            break
+                # calculate error over all training points
+                self._objFunc(self._w)
+                prevErr = self.errHistory[-1] if len(self.errHistory) > 0 else np.inf
+                if self._err / len(self.train) < prevErr:
+                    # all good, increase the learning rate
+                    self._eta *= etaInc
+                    print "+eta: ", self._eta
+                else:
+                    # rollback and start again with decreased learning rate
+                    self._eta *= etaDec
+                    print "-eta: ", self._eta
 
                 self._optCallback(None, log = True)
 
@@ -496,7 +490,7 @@ class Trainer():
             Default: 15000
         '''
 
-        optArgs["bounds"] = [optArgs["bounds"]] * len(self._w)
+        #optArgs["bounds"] = [optArgs["bounds"]] * len(self._w)
         wstar, finalErr, d = fmin_l_bfgs_b(self._objFunc, self._w.copy(), fprime=self._jacObjFunc, **optArgs)
 
         if d["warnflag"] == 0:
