@@ -41,7 +41,7 @@ class NeuralNet():
         # instantiate layers
         self.layers = []
         for i in range(1,self.N+1):
-            self.layers.append(Layer(neuronStruct[i-1], neuronStruct[i], actFunc[i-1]))
+            self.layers.append(Layer(neuronStruct[i-1], neuronStruct[i], actFunc[i-1], self.D))
 
     def calcOutput(self, input):
         '''
@@ -129,7 +129,7 @@ class Layer():
     Creates a single perceptron layer of a feedforward neural network
     '''
 
-    def __init__(self, D, M, actFunc):
+    def __init__(self, D, M, actFunc, nnIn):
         '''
         Creates a layer object
 
@@ -138,19 +138,23 @@ class Layer():
         D: number of input neurons (neurons in the previous layer)
         M: number of neurons in the layer
         actFunc {Activation}: activation function for the layer
+        nnIn {Int}: number of inputs to the neural network (used for initialization of weights)
         '''
         self.D = D
         self.M = M
 
-        # randomize weights within the range of the activation function
-        #min = actFunc.outputMinMax[0] / (2.0 * M)
-        #max = actFunc.outputMinMax[1] / (2.0 * M)
-        min = -1.0
-        max = 1.0
+        # randomize weights uniformly
+        #min = -1.0
+        #max = 1.0
+        #self.w = np.random.uniform(min, max, [M,D+1])
+
+        # randomize weights using gaussian distribution
+        # mean = 0
+        # stdev = 1/sqrt(self.D)
+        self.w = np.random.normal(0.0, (1.0/np.sqrt(nnIn)), [M,D+1])
+        
         # absorb bias parameters into the weight parameters by defining an 
         # additional input variable Xo = 1
-        self.w = np.random.uniform(min, max, [M,D+1])
-
         # vector of input prepended with 1 to handle bias
         self.input = np.zeros(D+1)
         self.input[0] = 1.0
@@ -303,7 +307,7 @@ class Trainer():
         w: flattened vector of network weights at a given iteration
         '''
         if self._iter % self._show == 0:
-            print "Iteration ", self._iter, "; error: ", self._err / len(self.train)
+            print "Iteration ", self._iter, "; avg error: ", self._err / len(self.train)
     
         if log:
             self.errHistory.append(self._err / len(self.train))
@@ -332,11 +336,14 @@ class Trainer():
             prevErr = np.inf
             # for each training iteration
             for tind in xrange(maxiter):
+                #err = []
                 # train one-by-one
                 for i in xrange(T):
                     # calculate weight gradients and update
                     self._w[:] -= eta * self._jacObjFunc(self._w, i)
-                    #self._w[:] -= eta * approx_fprime(self._w.copy(), self._objFunc, 1e-5)
+                    #err.append(self._objFunc(self._w, i))
+
+                #print "median error: ", np.median(err)
 
                 # calculate error over all training points
                 self._objFunc(self._w)
@@ -361,6 +368,7 @@ class Trainer():
             # for each training iteration
             for tind in xrange(maxiter):
                 # train one-by-one
+                err = []
                 for i in xrange(T):
                     prevErr = self._objFunc(self._w, trainInd = i)
                     wCache = self._w.copy()
@@ -371,17 +379,19 @@ class Trainer():
                         self._w[:] -= self._eta * grad
 
                         # calculate error of current training point
-                        if self._objFunc(self._w, trainInd = i) < prevErr + 1e-5:
+                        if self._objFunc(self._w, trainInd = i) <= prevErr:
                             # all good, increase the learning rate
                             self._eta *= etaInc
                             decErr = True
+                            err.append(self._err)
                         else:
                             # rollback weights and decrease learning rate, run again
                             self._w[:] = wCache
                             self._eta *= etaDec
                     
                 print "|gradient|", np.linalg.norm(grad)
-                print "eta: ", self._eta 
+                print "median error: ", np.median(err)
+                print "eta: ", self._eta
                 
                 # calculate error wrt. whole data set in memory
                 self._objFunc(self._w)
@@ -452,7 +462,57 @@ class Trainer():
                 prevIterErr = self._err
 
         return self.errHistory
+      
+    def trainDampedGradDesc(self, etaInit = 1e-2, etaInc = 1.1, etaDec = 0.5, convEps = 1e-5, maxiter = 25, sequential = True):
+        '''
+        ADAPTIVE GRADIENT DESCENT
+        -------------------------
+        eta {float}: learning rate
+            Default: 1e-2
+        etaInc {float}: ratio to increase learning rate (> 1)
+            Default: 1.1
+        etaDec {float}: ratio to decrease learning rate (< 1)
+            Default: 0.5
+        sequential {Boolean}: use sequential or batch training
+            Default: sequential
+        maxiter {Int}: maximum number of training iterations
+            Default: 1000
+        convEps {Float}: convergence criterion (when to stop iterating)
+
+        Check error and modify eta after each batch of training data.
+        '''
+        T = len(self.train)
+        
+        if self._eta is None:
+            self._eta = etaInit
+
+        if sequential:
+            prevIterErr = np.inf
+
+            # for each training iteration
+            for tind in xrange(maxiter):
+                # train one-by-one
+                for i in xrange(T):
+                    # calculate weight gradients and update
+                    grad = self._jacObjFunc(self._w, trainInd = i)
+                    self._w[:] -= self._eta * grad
+
+                print "|gradient|: ", np.linalg.norm(grad)
                 
+                self._eta *= (self._iter+1.0)/(self._iter + 2.0)
+                print "eta: ", self._eta
+
+                self._objFunc(self._w)
+                self._optCallback(None, log = True)
+
+                # check termination conditions satisfied
+                if abs(prevIterErr - self._err) < convEps:
+                    break
+
+                prevIterErr = self._err
+
+        return self.errHistory
+          
     def trainBFGS(self, **optArgs):
         '''
         BFGS
