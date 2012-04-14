@@ -275,7 +275,11 @@ class Trainer():
             # calculate delta at the output neurons
             lLayer = self._net.layers[-1]
             if deltaOver is None:
-                delta = (self._errorFunc.derivative(outPoint, targPoint) * lLayer.actFunc.derivative(outPoint)).T
+                # hardcode delta calculation for canonical link function softmax with KLDivergence
+                if isinstance(self._errorFunc, error.KLDiv) and isinstance(lLayer.actFunc, act.SoftMax):
+                    delta = (outPoint - targPoint).T
+                else:    
+                    delta = (self._errorFunc.derivative(outPoint, targPoint) * lLayer.actFunc.derivative(outPoint)).T
             else:
                 delta = deltaOver[[i],:].T
 

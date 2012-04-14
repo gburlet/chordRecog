@@ -92,7 +92,11 @@ def mixlearnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnSt
 
             qObs = qObs.split(",")
             cObs = cObs.split(",")
-               
+
+            # check features are in sync by timestamp
+            if float(cObs[0]) != float(qObs[0]):
+                raise ValueError("Feature files out of sync")
+
             # get chromagrams
             chroma = np.asfarray(cObs[1:])
 
@@ -136,13 +140,17 @@ def mixlearnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnSt
         # train on this pass
         if len(Xtrain) > 0:
             print "Xtrain: ", len(Xtrain), ", Xtarget: ", len(Xtarget)
-            trainer.setData(np.asarray(Xtrain), np.asarray(Xtarget))
+            train = np.asarray(Xtrain)
+            target = np.asarray(Xtarget)
+
+            trainer.setData(train, target)
             trainNet(trainer, verbose)
             # clear feature buffers
             del Xtrain[:]
             del Xtarget[:]
 
         passInd += 1
+        print "pass: ", passInd
 
         if passInd > 2000:
             break
@@ -167,17 +175,17 @@ def trainNet(trainer, verbose = False):
         
     # l-bfgs-b
     #iprint = 1 if verbose else 0
-    #optArgs = {'bounds': None, 'm': 100, 'factr': 1e7, 'pgtol': 1e-05, 'iprint': iprint, 'maxfun': 1500}
+    #optArgs = {'bounds': None, 'm': 100, 'factr': 1e7, 'pgtol': 1e-05, 'iprint': iprint, 'maxfun': 15000}
     #trainer.trainL_BFGS_B(**optArgs)
     
     # adaptive gradient descent
     #optArgs = {'etaInit': 1e-3, 'etaInc': 1.1, 'etaDec': 0.8, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
     #trainer.trainAdaptGradDesc(**optArgs)
 
-    optArgs = {'eta': 1e-3, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
+    optArgs = {'eta': 0.75, 'sequential': True, 'maxiter': 10, 'convEps': 1e-5}
     trainer.trainGradDesc(**optArgs)
 
-    #optArgs = {'etaInit': 1e-3, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
+    #optArgs = {'etaInit': 0.9, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
     #trainer.trainDampedGradDesc(**optArgs)
 
     #optArgs = {'etaInit': 1e-3, 'etaInc': 1.1, 'etaDec': 0.5, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
@@ -216,9 +224,9 @@ def process_dir(dir):
 
     return qtransFiles, chromaFiles
 
-net = mixlearnNNbuff(verbose = True, nnStruct = [256, 500, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'L1')
+net = mixlearnNNbuff(verbose = True, nnStruct = [256, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'L1')
 wstar = net.flattenWeights()
 
 # save optimal weights
-np.save('trainedweights/wstar_grad_KL_[500]_(1e-3).npy', wstar)
+np.save('trainedweights/wstar_grad_KLDiv_[50]_0.75.npy', wstar)
 print "all done!"
