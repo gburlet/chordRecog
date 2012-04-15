@@ -4,7 +4,7 @@ import neuralnet as nn
 import activation as act
 import os
 
-def mixlearnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnStruct = [256, 150, 24], errorFunc = 'SSE', verbose = False):
+def mixlearnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnStruct = [256, 150, 24], errorFunc = 'SSE', verbose = False, numDataPass = 1):
     '''
     Learns neural network weights with buffered feature input (batch training in segments).
     Use this function when thrashing to disk is a possibility
@@ -51,109 +51,112 @@ def mixlearnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnSt
     # get feature file pointers
     qtransFiles, chromaFiles = process_dir("data/burgoyne2011chords")
 
-    # until all the feature files have been exhausted
-    passInd = 0
-    while len(qtransFiles) > 0 and len(chromaFiles) > 0:
-        # for each pair of feature files that remain
-        i = 0
-        for qFile, cFile in izip(qtransFiles[:], chromaFiles[:]):
-            # open Constant-Q file and restore reading offset
-            qFilePtx = open(qFile["path"], 'r')
-            qFilePtx.seek(qFile["offset"])
-            # read an observation
-            qObs = qFilePtx.readline().strip()
+    for iDataset in range(numDataPass):
+        print "DATASET PASS %d" % (iDataset+1)
+        # until all the feature files have been exhausted
+        passInd = 0
+        while len(qtransFiles) > 0 and len(chromaFiles) > 0:
+            # for each pair of feature files that remain
+            i = 0
+            for qFile, cFile in izip(qtransFiles[:], chromaFiles[:]):
+                # open Constant-Q file and restore reading offset
+                qFilePtx = open(qFile["path"], 'r')
+                qFilePtx.seek(qFile["offset"])
+                # read an observation
+                qObs = qFilePtx.readline().strip()
 
-            # we've exhausted the observations in this song
-            if not qObs:
-                print "DONE WITH SONG: %s" % qFile["path"]
-                # remove from the processing queue
-                del qtransFiles[i]
-                del chromaFiles[i]
-                continue
+                # we've exhausted the observations in this song
+                if not qObs:
+                    print "DONE WITH SONG: %s" % qFile["path"]
+                    # remove from the processing queue
+                    del qtransFiles[i]
+                    del chromaFiles[i]
+                    continue
 
-            # update offset
-            qtransFiles[i]["offset"] = qFilePtx.tell()
-            # close the file pointer
-            qFilePtx.close()
+                # update offset
+                qtransFiles[i]["offset"] = qFilePtx.tell()
+                # close the file pointer
+                qFilePtx.close()
 
-            # open chroma file and restore reading offset
-            cFilePtx = open(cFile["path"], 'r')
-            cFilePtx.seek(cFile["offset"])
-            # read an observation
-            cObs = cFilePtx.readline().strip()
-            # update offset
-            chromaFiles[i]["offset"] = cFilePtx.tell()
-            # close the file pointer
-            cFilePtx.close()
-            i += 1
+                # open chroma file and restore reading offset
+                cFilePtx = open(cFile["path"], 'r')
+                cFilePtx.seek(cFile["offset"])
+                # read an observation
+                cObs = cFilePtx.readline().strip()
+                # update offset
+                chromaFiles[i]["offset"] = cFilePtx.tell()
+                # close the file pointer
+                cFilePtx.close()
+                i += 1
 
-            if passInd < 500:
-                continue
+                if passInd < 50:
+                    continue
 
-            qObs = qObs.split(",")
-            cObs = cObs.split(",")
+                qObs = qObs.split(",")
+                cObs = cObs.split(",")
 
-            # check features are in sync by timestamp
-            if float(cObs[0]) != float(qObs[0]):
-                raise ValueError("Feature files out of sync")
+                # check features are in sync by timestamp
+                if float(cObs[0]) != float(qObs[0]):
+                    raise ValueError("Feature files out of sync")
 
-            # get chromagrams
-            chroma = np.asfarray(cObs[1:])
+                # get chromagrams
+                chroma = np.asfarray(cObs[1:])
 
-            # avoid divide by zero (this is silence in audio)
-            if np.sum(chroma) < 5.0:
-                continue
+                # avoid divide by zero (this is silence in audio)
+                if np.sum(chroma) < 3.0:
+                    continue
 
-            # perform feature normalization
-            if chromaNorm == 'L1':
-                if np.sum(chroma[0:12]) != 0:
-                    chroma[0:12] /= np.sum(np.abs(chroma[0:12]))
-                if np.sum(chroma[12:24]) != 0:
-                    chroma[12:24] /= np.sum(np.abs(chroma[12:24]))
-            elif chromaNorm == 'L2':
-                if np.sum(chroma[0:12]) != 0:
-                    chroma[0:12] /= np.sum(chroma[0:12] ** 2)
-                if np.sum(chroma[12:24]) != 0:
-                    chroma[12:24] /= np.sum(chroma[12:24] ** 2)
-            elif chromaNorm == 'Linf':
-                if np.sum(chroma[0:12]) != 0:
-                    chroma[0:12] /= np.max(np.abs(chroma[0:12]))
-                if np.sum(chroma[12:24]) != 0:
-                    chroma[12:24] /= np.max(np.abs(chroma[12:24]))
+                # perform feature normalization
+                if chromaNorm == 'L1':
+                    if np.sum(chroma[0:12]) != 0:
+                        chroma[0:12] /= np.sum(np.abs(chroma[0:12]))
+                    if np.sum(chroma[12:24]) != 0:
+                        chroma[12:24] /= np.sum(np.abs(chroma[12:24]))
+                elif chromaNorm == 'L2':
+                    if np.sum(chroma[0:12]) != 0:
+                        chroma[0:12] /= np.sum(chroma[0:12] ** 2)
+                    if np.sum(chroma[12:24]) != 0:
+                        chroma[12:24] /= np.sum(chroma[12:24] ** 2)
+                elif chromaNorm == 'Linf':
+                    if np.sum(chroma[0:12]) != 0:
+                        chroma[0:12] /= np.max(np.abs(chroma[0:12]))
+                    if np.sum(chroma[12:24]) != 0:
+                        chroma[12:24] /= np.max(np.abs(chroma[12:24]))
 
-            Xtarget.append(chroma)
+                Xtarget.append(chroma)
 
-            # get Constant-Q transform
-            constantQ = np.asfarray(qObs[1:])
-            
-            # perform feature normalization
-            if constantQNorm is not None and np.sum(constantQ) != 0:
-                if constantQNorm == 'L1':
-                    constantQ /= np.sum(np.abs(constantQ))
-                elif constantQNorm == 'L2':
-                    constantQ /= np.sum(constantQ ** 2)
-                elif constantQNorm == 'Linf':
-                    constantQ /= np.max(np.abs(constantQ))
+                # get Constant-Q transform
+                constantQ = np.asfarray(qObs[1:])
+                
+                # perform feature normalization
+                if constantQNorm is not None and np.sum(constantQ) != 0:
+                    if constantQNorm == 'L1':
+                        constantQ /= np.sum(np.abs(constantQ))
+                    elif constantQNorm == 'L2':
+                        constantQ /= np.sum(constantQ ** 2)
+                    elif constantQNorm == 'Linf':
+                        constantQ /= np.max(np.abs(constantQ))
 
-            Xtrain.append(constantQ)
+                Xtrain.append(constantQ)
 
-        # train on this pass
-        if len(Xtrain) > 0:
-            print "Xtrain: ", len(Xtrain), ", Xtarget: ", len(Xtarget)
-            train = np.asarray(Xtrain)
-            target = np.asarray(Xtarget)
+            # train on this pass
+            if len(Xtrain) > 0:
+                print "Xtrain: ", len(Xtrain), ", Xtarget: ", len(Xtarget)
+                train = np.asarray(Xtrain)
+                target = np.asarray(Xtarget)
 
-            trainer.setData(train, target)
-            trainNet(trainer, verbose)
-            # clear feature buffers
-            del Xtrain[:]
-            del Xtarget[:]
+                trainer.setData(train, target)
+                trainNet(trainer, verbose)
 
-        passInd += 1
-        print "pass: ", passInd
+                # clear feature buffers
+                del Xtrain[:]
+                del Xtarget[:]
 
-        if passInd > 2000:
-            break
+            passInd += 1
+            print "pass: ", passInd
+
+            #if passInd > 2000:
+            #    break
                
     if verbose:
         print "Done training neural network."
@@ -175,20 +178,20 @@ def trainNet(trainer, verbose = False):
         
     # l-bfgs-b
     #iprint = 1 if verbose else 0
-    #optArgs = {'bounds': None, 'm': 100, 'factr': 1e7, 'pgtol': 1e-05, 'iprint': iprint, 'maxfun': 15000}
+    #optArgs = {'bounds': None, 'm': 100, 'factr': 1e10, 'pgtol': 1e-02, 'iprint': iprint, 'maxfun': 2000}
     #trainer.trainL_BFGS_B(**optArgs)
     
     # adaptive gradient descent
-    #optArgs = {'etaInit': 1e-3, 'etaInc': 1.1, 'etaDec': 0.8, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
+    #optArgs = {'etaInit': 0.95, 'etaInc': 1.1, 'etaDec': 0.65, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
     #trainer.trainAdaptGradDesc(**optArgs)
 
-    optArgs = {'eta': 0.75, 'sequential': True, 'maxiter': 10, 'convEps': 1e-5}
+    optArgs = {'eta': 0.75, 'sequential': True, 'maxiter': 1, 'convEps': 1e-5}
     trainer.trainGradDesc(**optArgs)
 
     #optArgs = {'etaInit': 0.9, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
     #trainer.trainDampedGradDesc(**optArgs)
 
-    #optArgs = {'etaInit': 1e-3, 'etaInc': 1.1, 'etaDec': 0.5, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
+    #optArgs = {'etaInit': 1e-5, 'etaInc': 1.1, 'etaDec': 0.5, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
     #trainer.trainIndivAdaptGradDesc(**optArgs)
  
     #if verbose:
@@ -224,9 +227,9 @@ def process_dir(dir):
 
     return qtransFiles, chromaFiles
 
-net = mixlearnNNbuff(verbose = True, nnStruct = [256, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'L1')
+net = mixlearnNNbuff(verbose = True, nnStruct = [256, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'L1', numDataPass = 4)
 wstar = net.flattenWeights()
 
 # save optimal weights
-np.save('trainedweights/wstar_grad_KLDiv_[50]_0.75.npy', wstar)
+np.save('trainedweights/wstar_grad_KLDiv_[0]_0.75.npy', wstar)
 print "all done!"

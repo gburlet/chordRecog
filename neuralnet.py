@@ -278,7 +278,8 @@ class Trainer():
                 # hardcode delta calculation for canonical link function softmax with KLDivergence
                 if isinstance(self._errorFunc, error.KLDiv) and isinstance(lLayer.actFunc, act.SoftMax):
                     delta = (outPoint - targPoint).T
-                else:    
+                else:
+                    # this isn't correct for multidimensional output (should be dot product)
                     delta = (self._errorFunc.derivative(outPoint, targPoint) * lLayer.actFunc.derivative(outPoint)).T
             else:
                 delta = deltaOver[[i],:].T
@@ -556,6 +557,7 @@ class Trainer():
 
         #optArgs["bounds"] = [optArgs["bounds"]] * len(self._w)
         wstar, finalErr, d = fmin_l_bfgs_b(self._objFunc, self._w.copy(), fprime=self._jacObjFunc, **optArgs)
+        #wstar, finalErr, d = fmin_l_bfgs_b(self._objFunc, self._w.copy(), approx_grad=True, **optArgs)
 
         if d["warnflag"] == 0:
             print "Converged to a solution in ", d["funcalls"], " steps."

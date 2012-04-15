@@ -15,7 +15,7 @@ class Sigmoid:
 
     # from my tests: np.finfo(np.float64).max = 1.7976931348623157e+308
     # and exp(a) < max, thus a < ln(max) => clamp on a should be < 709 to avoid overflow
-    clamp = 150
+    clamp = 500
 
     def __call__(self, a):
         # clamp values to avoid numerical overflow/underflow
