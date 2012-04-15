@@ -48,11 +48,12 @@ def mixlearnNNbuff(chromaNorm = 'L1', constantQNorm = None, deltaTrain = 2, nnSt
     # hire a trainer for the network
     trainer = nn.Trainer(net, errorFunc, 1)
 
-    # get feature file pointers
-    qtransFiles, chromaFiles = process_dir("data/burgoyne2011chords")
-
     for iDataset in range(numDataPass):
         print "DATASET PASS %d" % (iDataset+1)
+        
+        # get feature file pointers
+        qtransFiles, chromaFiles = process_dir("data/burgoyne2011chords")
+
         # until all the feature files have been exhausted
         passInd = 0
         while len(qtransFiles) > 0 and len(chromaFiles) > 0:
@@ -185,7 +186,7 @@ def trainNet(trainer, verbose = False):
     #optArgs = {'etaInit': 0.95, 'etaInc': 1.1, 'etaDec': 0.65, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
     #trainer.trainAdaptGradDesc(**optArgs)
 
-    optArgs = {'eta': 0.75, 'sequential': True, 'maxiter': 1, 'convEps': 1e-5}
+    optArgs = {'eta': 0.01, 'sequential': True, 'maxiter': 1, 'convEps': 1e-5}
     trainer.trainGradDesc(**optArgs)
 
     #optArgs = {'etaInit': 0.9, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
@@ -227,7 +228,7 @@ def process_dir(dir):
 
     return qtransFiles, chromaFiles
 
-net = mixlearnNNbuff(verbose = True, nnStruct = [256, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'L1', numDataPass = 4)
+net = mixlearnNNbuff(verbose = True, nnStruct = [256, 40, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'L1', numDataPass = 1)
 wstar = net.flattenWeights()
 
 # save optimal weights
