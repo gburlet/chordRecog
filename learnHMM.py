@@ -53,11 +53,11 @@ def learnHMM(M, addOne = True, features = 't', featureNorm = 'L1', covType = 'fu
         sid = int(obs[0])
 
         if features == 't':
-            chroma = np.asfarray(obs[2:14])[np.newaxis,:]
+            chroma = np.asfarray(obs[2:14])
         elif features == 'b':
-            chroma = np.asfarray(obs[14:26])[np.newaxis,:]
+            chroma = np.asfarray(obs[14:26])
         elif features == 'tb':
-            chroma = np.asfarray(obs[2:26])[np.newaxis,:]
+            chroma = np.asfarray(obs[2:26])
 
         # skip silence (really there are no chords in either the treble or bass)            
         if np.sum(chroma) == 0:
@@ -119,9 +119,9 @@ def learnHMM(M, addOne = True, features = 't', featureNorm = 'L1', covType = 'fu
             
             # update B
             if chordName in bDict:
-                bDict[chordName] = np.vstack((bDict[chordName], chroma))
+                bDict[chordName].append(chroma)
             else:
-                bDict[chordName] = chroma.copy()
+                bDict[chordName] = [chroma]
 
             # update state labels
             QLabels.add(chordName)
@@ -165,6 +165,9 @@ def learnHMM(M, addOne = True, features = 't', featureNorm = 'L1', covType = 'fu
                 j += 1
         
         # fill B
+        # convert to numpy array
+        Xtrain = np.asarray(bDict[q])
+        del bDict[q]
         print "learning emissions for chord: %s, index: %d, #obs: %d" % (q, i, bDict[q].shape[0])
         bGMM = GMM(M, D, covType, zeroCorr=1e-12)
         bGMM.expectMax(bDict[q], maxIter=50, convEps=1e-6, verbose=True)
