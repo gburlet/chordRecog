@@ -154,7 +154,7 @@ class GMM:
         '''
 
         # debug: save training data
-        self.X = X
+        # self.X = X
 
         N, dim = X.shape
         if dim != self.D:
