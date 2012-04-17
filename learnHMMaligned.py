@@ -62,7 +62,8 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
         if chordQuality == 'full':
             if obs[5] == "NA":
                 continue
-            chordName += obs[3] + obs[5]
+            else:
+                chordName += obs[3] + obs[5]
         else:
             if obs[6] == "NA":
                 chordName = "NA"
@@ -89,7 +90,13 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
             chordName = obs[6] if chordQuality == 'simple' else obs[5]
 
             # rotate chroma
-            pc = int(obs[4])
+            try:
+                pc = int(obs[4])
+            except ValueError:
+                # root.pc is NA
+                # nothing we can do here
+                continue
+            
             if features == 'tb':
                 # rotate treble & bass
                 chroma[0:12] = np.roll(chroma[0:12], -pc)
