@@ -25,8 +25,8 @@ def logsumexp(lnX, axis=0):
 
     lnX_norm = lnX - lnXmax
     # clamp to avoid overflow/underflow
-    lnX_norm[lnX_norm <= -150] = -150
-    lnX_norm[lnX_norm >= 150] = 150
+    lnX_norm[lnX_norm <= -500] = -500
+    lnX_norm[lnX_norm >= 500] = 500
     lnXsum = np.log(np.sum(np.exp(lnX_norm), axis=0)) + lnXmax
 
     return lnXsum
