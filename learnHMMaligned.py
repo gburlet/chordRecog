@@ -24,7 +24,7 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
     B {1xN}: emission distribution for each state
     '''
 
-    groundTruth = open('data/gtruth_chroma_simple.csv', 'r')
+    groundTruth = open('data/gtruth_chroma.csv', 'r')
     # 0, 1, 7, 10, 11, 12, 13
     # sid, timestamp, local.tonic.name, root.name, root.pc, quality, simple.quality, obs
     #  0,      1,            2,             3,        4,       5,          6,         7-
@@ -224,7 +224,7 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
 
     return pi, A, B, QLabels, Xtest, ytest, AIC
 
-pi, A, B, labels, Xtest, ytest, AIC = (M, addOne = True, features = 'tb', chordQuality = 'simple', rotateChroma = False, key = False, featureNorm = 'L1', covType = 'full', leaveOneOut = 3, obsThresh = 0)
+pi, A, B, labels, Xtest, ytest, AIC = learnHMM(M=2, addOne=True, features='tb', chordQuality='simple', rotateChroma=False, key=False, featureNorm='L1', covType='full', leaveOneOut=3, obsThresh=0)
 
 print "AIC: ", AIC
 
