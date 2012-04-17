@@ -352,7 +352,7 @@ class Trainer():
 
                 # calculate error over all training points
                 self._objFunc(self._w)
-                self._optCallback(None, log = True)
+                self._optCallback(None, log = False)
 
                 # check termination conditions satisfied
                 if abs(prevErr - self._err) < convEps:
