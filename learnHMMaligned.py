@@ -65,10 +65,9 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
             chordName += obs[3] + obs[5]
         else:
             if obs[6] == "NA":
-                quality = obs[5]
+                chordName = "NA"
             else:
-                quality = obs[6]
-            chordName += obs[3] + quality
+                chordName += obs[3] + obs[6]
 
         # first timestamps in songs usually have no annotation
         if chordName.strip() == "NANA":
