@@ -1,8 +1,10 @@
 import os
 import numpy as np
 from emission import *
+import ghmm
+import pickle
 
-def learnHMM(M, addOne = True, features = 'tb', covType = 'full', leaveOneOut = 3, obsThresh = 0):
+def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateChroma = False, key = False, featureNorm = 'L1', covType = 'full', leaveOneOut = 3, obsThresh = 0):
     '''
     PARAMETERS
     ----------
@@ -22,8 +24,10 @@ def learnHMM(M, addOne = True, features = 'tb', covType = 'full', leaveOneOut = 
     B {1xN}: emission distribution for each state
     '''
 
-    groundTruth = open('data/gtruth_constqnetout.csv', 'r')
-    # sid, timestamp, chordName, chroma vector
+    groundTruth = open('data/gtruth_chroma_simple.csv', 'r')
+    # 0, 1, 7, 10, 11, 12, 13
+    # sid, timestamp, local.tonic.name, root.name, root.pc, quality, simple.quality, obs
+    #  0,      1,            2,             3,        4,       5,          6,         7-
 
     piDict = {}
     aDict = {}
@@ -46,23 +50,72 @@ def learnHMM(M, addOne = True, features = 'tb', covType = 'full', leaveOneOut = 
     for obsNum, obs in enumerate(groundTruth):        
         obs = obs.split(",")
         sid = int(obs[0])
-        chordName = obs[2]
+
+        # form chord name
+        if key:
+            chordName = obs[2] + '.'
+        else:
+            chordName = ''
+
+        if chordQuality == 'full':
+            chordName += obs[3] + obs[5]
+        else:
+            chordName += obs[3] + obs[6]
+
         # first timestamps in songs usually have no annotation
         if chordName.strip() == "NANA":
             continue
 
         if features == 't':
-            chroma = np.asfarray(obs[3:15])
+            chroma = np.asfarray(obs[7:19])
         elif features == 'b':
-            chroma = np.asfarray(obs[15:27])
+            chroma = np.asfarray(obs[19:31])
         elif features == 'tb':
-            chroma = np.asfarray(obs[3:27])
+            chroma = np.asfarray(obs[7:31])
 
         # skip silence (really there are no chords in either the treble or bass)            
         if np.sum(chroma) == 0:
             continue
 
-        # features are already normalized by neural net softmax output!
+        if rotateChroma:
+            # override chord name with quality
+            chordName = obs[6] if chordQuality == 'simple' else obs[5]
+
+            # rotate chroma
+            pc = int(obs[4])
+            if features == 'tb':
+                # rotate treble & bass
+                chroma[0:12] = np.roll(chroma[0:12], -pc)
+                chroma[12:24] = np.roll(chroma[12:24], -pc)
+            else:
+                chroma[0:12] = np.roll(chroma[0:12], -pc)
+
+        # perform feature normalization
+        if featureNorm == 'L1':
+            if features == 'tb':
+                if np.sum(chroma[0:12]) != 0:
+                    chroma[0:12] /= np.sum(np.abs(chroma[0:12]))
+                if np.sum(chroma[12:]) != 0:
+                    chroma[12:24] /= np.sum(np.abs(chroma[12:24]))
+            else:
+                chroma /= np.sum(np.abs(chroma))
+        elif featureNorm == 'L2':
+            if features == 'tb':
+                if np.sum(chroma[0:12]) != 0:
+                    chroma[0:12] /= np.sum(chroma[0:12] ** 2)
+                if np.sum(chroma[12:]) != 0:
+                    chroma[12:24] /= np.sum(chroma[12:24] ** 2)
+            else:
+                chroma /= np.sum(chroma ** 2)
+        elif featureNorm == 'Linf':
+            if features == 'tb':
+                if np.sum(chroma[0:12]) != 0:
+                    chroma[0:12] /= np.max(np.abs(chroma[0:12]))
+                if np.sum(chroma[12:]) != 0:
+                    chroma[12:24] /= np.max(np.abs(chroma[12:24]))
+            else:
+                chroma /= np.max(np.abs(chroma))
+
 
         if sid != leaveOneOut:
             if sid != pSid:
@@ -118,6 +171,9 @@ def learnHMM(M, addOne = True, features = 'tb', covType = 'full', leaveOneOut = 
     A = np.zeros((N,N))
     B = []
 
+    # initialize lnP for AIC calculation
+    lnP = 0.0
+
     # for each state
     for i, q in enumerate(QLabels):
         # fill pi
@@ -138,8 +194,11 @@ def learnHMM(M, addOne = True, features = 'tb', covType = 'full', leaveOneOut = 
         del bDict[q]
         print "learning emissions for chord: %s, index: %d, #obs: %d" % (q, i, Xtrain.shape[0])
         bGMM = GMM(M, D, covType, zeroCorr=1e-12)
-        bGMM.expectMax(Xtrain, maxIter=50, convEps=1e-6, verbose=True)
+        lnP_history = bGMM.expectMax(Xtrain, maxIter=50, convEps=1e-6, verbose=True)
         B.append(bGMM)
+
+        # update running total of lnP for AIC
+        lnP += lnP_history[-1]
             
         i += 1
 
@@ -154,6 +213,30 @@ def learnHMM(M, addOne = True, features = 'tb', covType = 'full', leaveOneOut = 
 
     Xtest = np.asarray(Xtest).squeeze()
 
-    return pi, A, B, QLabels, Xtest, ytest
+    # AIC calculation
+    if covType == 'full':
+        numCovar = D ** 2
+    else:
+        numCovar = D
 
-#pi, A, B, labels, Xtest, ytest = learnHMM(3, covType='full', features = 'tb', leaveOneOut = 3, obsThresh=0)
+    k = (M*(D + numCovar) + M-1) * len(QLabels)
+    AIC = 2*k - 2*lnP
+
+    return pi, A, B, QLabels, Xtest, ytest, AIC
+
+pi, A, B, labels, Xtest, ytest, AIC = (M, addOne = True, features = 'tb', chordQuality = 'simple', rotateChroma = False, key = False, featureNorm = 'L1', covType = 'full', leaveOneOut = 3, obsThresh = 0)
+
+print "AIC: ", AIC
+
+# number of chords in ground truth
+N = A.shape[0]
+
+# fill the HMM with the learned parameters
+hmm = ghmm.GHMM(N, labels = labels, pi = pi, A = A, B = B)
+
+# pickle ghmm for future reference
+outP = open('trainedhmms/hmm_M=2_sig=full_quality=simple_rotate=0_key=0', 'w')
+
+pickle.dump(hmm, outP)
+
+outP.close()
