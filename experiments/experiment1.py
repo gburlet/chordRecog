@@ -1,5 +1,5 @@
 from learnHMM import *
-from ghmm import *
+import ghmm
 
 '''
 MUMT 609
@@ -26,7 +26,7 @@ pi, A, B, labels, Xtest, ytest = learnHMM(3, covType = covType, features = featu
 N = A.shape[0]
 
 # fill the HMM with the learned parameters
-hmm = GHMM(N, labels = labels, pi = pi, A = A, B = B)
+hmm = ghmm.GHMM(N, labels = labels, pi = pi, A = A, B = B)
 
 # find optimal state sequence
 pstar, qstar = hmm.viterbi(Xtest)
