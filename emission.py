@@ -277,6 +277,13 @@ class GMM:
         # zero correction
         self._Sigma[self._Sigma == 0.0] += self._zeroCorr
 
+        if hasattr(slinalg, 'solve_triangular'):
+            # only in scipy since 0.9
+            solve_triangular = slinalg.solve_triangular
+        else:
+            # slower, but works
+            solve_triangular = slinalg.solve
+
         # for each mixture component
         for l in range(0,self.M):
             X_mu = X - self._mu[l,:]
@@ -296,7 +303,7 @@ class GMM:
                     self._Sigma[l,:,:] = 1e-6 * np.eye(self.D)
                     U = 1000.0 * self._Sigma[l,:,:]
                     
-                Q = slinalg.solve_triangular(U, X_mu.T, lower=True)
+                Q = solve_triangular(U, X_mu.T, lower=True)
                 lnP_Xi_l[:,l] = -0.5 * (self.D * np.log(2.0 * np.pi) + 2.0 * np.sum(np.log(np.diag(U))) + np.sum(Q ** 2, axis=0))
 
         lnP_Xi_l += self._lnw
