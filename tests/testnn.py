@@ -1,3 +1,6 @@
+import sys
+sys.path.insert(0, "..")
+
 import neuralnet as nn
 import activation as act
 import numpy as np
@@ -33,7 +36,7 @@ trainer = nn.Trainer(net, 'SSE', 25, xtrain, ytrain)
 #optArgs = {'gtol': 1e-6, 'maxiter': 250}
 #trainer.trainBFGS(**optArgs)
 
-optArgs = {'bounds': None, 'm': 1000, 'factr': 1e7, 'pgtol': 1e-02, 'iprint': 1, 'maxfun': 15000}
+optArgs = {'bounds': None, 'm': 1000, 'factr': 1e7, 'pgtol': 1e-02, 'iprint': 1, 'maxfun': 1500}
 trainer.trainL_BFGS_B(**optArgs)
 
 # run the input through the network
