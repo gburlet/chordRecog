@@ -1,6 +1,6 @@
 import numpy as np
 from emission import *
-from utilities import logsumexp
+from utilities import logsumexp, unsqueeze
 
 class GHMM:
     ''' 
@@ -41,7 +41,7 @@ class GHMM:
             self._setA(args['A'])
         else:
             aRand = np.random.rand(self.N, self.N)
-            aRand / aRand.sum(axis=1)[:,np.newaxis]
+            aRand /= aRand.sum(axis=1)[:,np.newaxis]
             self._setA(aRand)
 
         # initialize emission distributions
@@ -108,7 +108,9 @@ class GHMM:
     CLASS METHODS
     -------------
     '''
-    def baumWelch(self, O, init = 'pa', update = 'pab', maxIter = 10, convEps = 0.01, verbose = False):
+
+    # TODO
+    def baumWelch(self, O, init = 'pa', update = 'pab', maxIter = 10, convEps = 1e-2, verbose = False):
         '''
         Estimates the model parameters using the classic Baum-Welch expectation maximization algorithm
 
@@ -118,10 +120,15 @@ class GHMM:
         init: p - init pi, a - init transitions, b - init emissions
         update: p - update pi, a - update transitions, b - update emissions
         maxIter: maximum number of iterations to run the EM algorithm
+            Default: 10
         convEps: convergence threshold
+            Default: 1e-2
         verbose: print progress
         '''
 
+        raise NotImplementedError("baum-welch not yet implemented")
+
+        '''
         # init params
         if 'p' in init:
             self._setPi(np.ones((1, self.N)) / self.N)
@@ -133,20 +140,40 @@ class GHMM:
 
         lnP_history = []
         for i in range(maxIter):
+            # initialization
             lnP_curr = 0
+            pi = np.zeros(self.N)
+            A = np.zeros([self.N,self.N])
             for o in O:
-                lnP, lnAlpha = self._forward(o)
-                lnBeta = self._backward(o)
-                lnGamma = lnAlpha + lnBeta - lnP
+                T, D = o.shape
+
+                # calculate lnP for each observation for each state's emission distribution
+                # lnP_obs {T, N}
+                lnP_obs = np.zeros([T,self.N])
+                for i in range(self.N):
+                    lnP_obs[:,i] = self._B[i].calcLnP(o)
+
+                lnP, lnAlpha, lnC = self._forward(o, scale=True)
+                lnBeta = self._backward(o, lnC)
+                lnGamma = lnAlpha + lnBeta # (T,N)
+                lnGamma = lnGamma - logsumexp(lnGamma, axis=1)[:,np.newaxis]
 
                 lnP_curr += lnP
 
+                # update pi expectation
+                pi += np.exp(lnGamma[0,:])
+
+                # update A expectation
+                for i in range(T):
+                    Xi = lnAlpha[[t-1],:].T + np.log(self._A) + lnP_obs[t,:] + lnBeta[t,:]
+               
                 
             lnP_history.append(lnP_curr)
 
             # check convergence criterion
             if i > 0 and abs(lnP_history[-1] - lnP_history[-2]) < convEps:
                 break
+        '''
         
     def _forward(self, O, scale = True):
         '''
@@ -166,6 +193,7 @@ class GHMM:
         lnC (T,): log of the scaling coefficients for each observation
         '''
 
+        O = unsqueeze(O,2)
         T, D = O.shape
 
         # check dimensions of provided observations agree with the trained emission distributions
@@ -176,7 +204,7 @@ class GHMM:
         # calculate lnP for each observation for each state's emission distribution
         # lnP_obs {T, N}
         lnP_obs = np.zeros([T,self.N])
-        for i in range(0,self.N):
+        for i in range(self.N):
             lnP_obs[:,i] = self._B[i].calcLnP(O)
 
         # forward variable, alpha {T,N}
@@ -192,7 +220,7 @@ class GHMM:
             lnAlpha[0,:] += lnC[0]
             
         # Step 2: Induction
-        for t in range(1,T-1):
+        for t in range(1,T):
             lnAlpha[t,:] = logsumexp(lnAlpha[[t-1],:].T + np.log(self._A), axis=0) + lnP_obs[t,:]
             if scale:
                 lnC[t] = -logsumexp(lnAlpha[0,:])
@@ -202,7 +230,7 @@ class GHMM:
         if scale:
             lnP = -np.sum(lnC)
         else:
-            lnP = logsumexp(lnAlpha[T,:])
+            lnP = logsumexp(lnAlpha[T-1,:])
 
         return lnP, lnAlpha, lnC
 
@@ -222,6 +250,7 @@ class GHMM:
                       sequence 0T OT-1 ... Ot+1 (backwards to time t+1) and State Si at time t+1
         '''
         
+        O = unsqueeze(O,2)
         T, D = O.shape
 
         # check dimensions of provided observations agree with the trained emission distributions
@@ -238,11 +267,11 @@ class GHMM:
         # backward variable, beta {T,N}
         # Step 1: Initialization
         # since ln(1) = 0
-        lnBeta = np.zeros([T,self.N]) + lnC
+        lnBeta = np.zeros([T,self.N]) + lnC[T-1]
 
         # Step 2: Induction
-        for t in reversed(range(0,T-1)):
-            lnBeta[t,:] = logsumexp(np.log(self._A) + lnP_obs[t+1,:] + lnBeta[t+1,:], axis=1) + lnC
+        for t in reversed(range(T-1)):
+            lnBeta[t,:] = logsumexp(np.log(self._A) + lnP_obs[t+1,:] + lnBeta[t+1,:], axis=1) + lnC[t]
 
         return lnBeta
 
@@ -262,6 +291,7 @@ class GHMM:
         qstar {Tx1}: labels/indices of states in q* (normal python array of len T)
         '''
 
+        O = unsqueeze(O,2)
         T, D = O.shape
 
         # check dimensions of provided observations agree with the trained emission distributions
@@ -272,7 +302,7 @@ class GHMM:
         # calculate lnP for each observation for each state's emission distribution
         # lnP_obs {T, N}
         lnP_obs = np.zeros([T,self.N])
-        for i in range(0,self.N):
+        for i in range(self.N):
             lnP_obs[:,i] = self._B[i].calcLnP(O)
 
         # lnDelta {TxN}: best score along a single path, at time t, accounting for the first t observations and ending in state Si
@@ -296,7 +326,7 @@ class GHMM:
         pstar = lnDelta[T-1,qstar_t]
 
         qstar = []
-        for t in reversed(range(0,T)):
+        for t in reversed(range(T)):
             qstar.append(qstar_t)
             qstar_t = lnPsi[t,qstar_t]
 
@@ -319,10 +349,11 @@ class GHMM:
         dC / dy {TxD}: derivative of the optimization criterion for each observation
         '''
 
+        O = unsqueeze(O,2)
         T, D = O.shape
 
-        lnAlpha = self._forward(O)[1]
-        lnBeta = self._backward(O)
+        _, lnAlpha, lnC = self._forward(O, scale=True)
+        lnBeta = self._backward(O, lnC)
 
         # calculate lnP for each observation for each state's emission distribution
         # lnP_obs {T, N}
@@ -335,4 +366,4 @@ class GHMM:
         for i in range(0,self.N):
             dlnP[:,i,:] = self._B[i].calcDerivLnP(O)
 
-        return np.exp(logsumexp((lnBeta + lnAlpha - lnP_obs)[:,:,np.newaxis] + dlnP, axis=1))
+        return np.sum(np.exp(lnBeta + lnAlpha - lnP_obs)[:,:,np.newaxis] * dlnP, axis=1)
