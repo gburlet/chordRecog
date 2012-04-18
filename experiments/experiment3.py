@@ -90,7 +90,7 @@ hmm = ghmm.GHMM(N, labels = labels, pi = pi, A = A, B = B)
 # pickle ghmm for future reference
 rot = '1' if exp[expInd]['rotate'] else '0'
 key = '1' if exp[expInd]['key'] else '0'
-logPath = 'trainedhmms/hmm_M=' + str(exp[expInd]['M']) + '_sig=' + exp[expInd]['sig'] + '_quality=' + exp[expInd]['quality'] + '_rotate=' + rot + '_key=' + key
+logPath = '../trainedhmms/hmm_M=' + str(exp[expInd]['M']) + '_sig=' + exp[expInd]['sig'] + '_quality=' + exp[expInd]['quality'] + '_rotate=' + rot + '_key=' + key
 outP = open(logPath, 'w')
 
 pickle.dump(hmm, outP)
