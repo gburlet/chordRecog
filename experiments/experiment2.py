@@ -61,4 +61,4 @@ for block in holdOutAcc:
         acc += block[song]
 acc /= numSongs
 
-print acc
+print "average accuracy: ", acc
