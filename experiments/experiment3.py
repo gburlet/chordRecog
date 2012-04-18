@@ -5,7 +5,7 @@ import pickle
 
 import sys
 sys.path.insert(0, "..")
-import learnHMMaligned
+from learnHMMaligned import *
 import ghmm
 
 expInd = 6

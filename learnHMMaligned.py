@@ -21,7 +21,7 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
     B {1xN}: emission distribution for each state
     '''
 
-    groundTruth = open('data/gtruth_chroma.csv', 'r')
+    groundTruth = open('../data/gtruth_chroma.csv', 'r')
     # 0, 1, 7, 10, 11, 12, 13
     # sid, timestamp, local.tonic.name, root.name, root.pc, quality, simple.quality, obs
     #  0,      1,            2,             3,        4,       5,          6,         7-
@@ -214,9 +214,8 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
         del bDict[q]
         print "learning emissions for chord: %s, index: %d, #obs: %d" % (q, i, Xtrain.shape[0])
         bGMM = GMM(M, D, covType, zeroCorr=1e-12)
-        #lnP_history = bGMM.expectMax(Xtrain, maxIter=50, convEps=1e-6, verbose=True)
+        lnP_history = bGMM.expectMax(Xtrain, maxIter=50, convEps=1e-6, verbose=True)
         B.append(bGMM)
-        lnP_history = [1]
 
         # update running total of lnP for AIC
         lnP += lnP_history[-1]
