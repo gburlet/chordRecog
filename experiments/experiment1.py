@@ -23,7 +23,7 @@ obsThresh = 0       # chords with number of observations below obsThresh are dis
 addOne = True       # add one to pi and A before normalization
 
 # learn HMM model lambda = (pi, A, B) from ground truth
-pi, A, B, labels, Xtest, ytest = learnHMM(3, covType = covType, features = features, featureNorm = featureNorm, leaveOneOut = leaveOutSong, obsThresh=obsThresh)
+pi, A, B, labels, Xtest, ytest = learnHMM(M, covType = covType, features = features, featureNorm = featureNorm, leaveOneOut = leaveOutSong, obsThresh=obsThresh)
 
 # number of chords in ground truth
 N = A.shape[0]
