@@ -116,6 +116,8 @@ def learnHMM(M, addOne = True, features = 't', featureNorm = 'L1', covType = 'fu
                         aDict[pChordName][chordName] = 1.0
                 else:
                     aDict[pChordName] = {chordName: 1.0}
+
+                pChordName = chordName
             
             # update B
             if chordName in bDict:

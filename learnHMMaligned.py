@@ -1,10 +1,8 @@
 import os
 import numpy as np
 from emission import *
-import ghmm
-import pickle
 
-def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateChroma = False, key = False, featureNorm = 'L1', covType = 'full', leaveOneOut = 3, obsThresh = 0):
+def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateChroma = False, key = False, featureNorm = 'L1', covType = 'full', holdOut = (-1,-1), obsThresh = 0):
     '''
     PARAMETERS
     ----------
@@ -14,8 +12,7 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
     featureNorm: L1, L2, Linf, or none normalization
     covType: type of the covariance matrix for the GMM emission distribution
              'diag', 'full'
-    leaveOneOut: songID to leave out of the training phase and save for model validation
-    
+    holdOut: song range (inclusive bounds) to leave out of the training phase and save for model validation (not song id, but in order of reading)
 
     RETURNS
     -------
@@ -40,12 +37,12 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
         D = 12
 
     pSid = -1
-    numSongs = 0;
+    songNum = 0;
     pChordName = ""
     
     # initialize hold out data storage
-    Xtest = []
-    ytest = []
+    Xtest = {}
+    Ytest = {}
 
     for obsNum, obs in enumerate(groundTruth):        
         obs = obs.split(",")
@@ -130,19 +127,33 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
             else:
                 chroma /= np.max(np.abs(chroma))
 
+        if sid != pSid:
+            # new song
+            pSid = sid
+            songNum += 1
 
-        if sid != leaveOneOut:
-            if sid != pSid:
-                # new training sequence
+            if songNum >= holdOut[0] and songNum <= holdOut[1]:
+                # this observation is part of the validation set
+                print "holdout song id: ", sid, "number: ", songNum
+                Xtest[sid] = [chroma]
+                Ytest[sid] = [chordName]
+            else:
+                # this observation is part of the training set
+                print "training song id: ", sid, "number: ", songNum
+
                 # update pi
                 if chordName in piDict:
                     piDict[chordName] += 1
                 else:
                     piDict[chordName] = 1
-                pSid = sid
-                print "processing song: ", sid
+
                 pChordName = chordName
-                numSongs += 1
+        else:
+            # same song
+            if songNum >= holdOut[0] and songNum <= holdOut[1]:
+                # this observation is part of the validation set
+                Xtest[sid].append(chroma)
+                Ytest[sid].append(chordName)
             else:
                 #update A
                 if pChordName in aDict:
@@ -152,28 +163,23 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
                         aDict[pChordName][chordName] = 1.0
                 else:
                     aDict[pChordName] = {chordName: 1.0}
+
+                pChordName = chordName
             
-            # update B
-            if chordName in bDict:
-                bDict[chordName].append(chroma)
-            else:
-                bDict[chordName] = [chroma]
+                # update B
+                if chordName in bDict:
+                    bDict[chordName].append(chroma)
+                else:
+                    bDict[chordName] = [chroma]
 
-            # update state labels
-            QLabels.add(chordName)
-        else:
-            # this is part of the validation set
-            # add observation to Xtest
-            Xtest.append(chroma)
+                # update state labels (this is a set, only unique chord names are added)
+                QLabels.add(chordName)
 
-            # add the observations chord label
-            ytest.append(chordName)
-    
     # close file pointer    
     groundTruth.close()
 
     print "done parsing, learning state transitions and emissions ..."
-    QLabels = sorted(QLabels)
+    QLabels = sorted(QLabels) # turns set into ordered list
     
     # prune states with insufficient observations
     QLabels = [q for q in QLabels if len(bDict[q]) >= obsThresh]
@@ -181,8 +187,8 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
     N = len(QLabels)
 
     # initialize arrays
-    pi = np.zeros((1,N))
-    A = np.zeros((N,N))
+    pi = np.zeros([1,N])
+    A = np.zeros([N,N])
     B = []
 
     # initialize lnP for AIC calculation
@@ -208,8 +214,9 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
         del bDict[q]
         print "learning emissions for chord: %s, index: %d, #obs: %d" % (q, i, Xtrain.shape[0])
         bGMM = GMM(M, D, covType, zeroCorr=1e-12)
-        lnP_history = bGMM.expectMax(Xtrain, maxIter=50, convEps=1e-6, verbose=True)
+        #lnP_history = bGMM.expectMax(Xtrain, maxIter=50, convEps=1e-6, verbose=True)
         B.append(bGMM)
+        lnP_history = [1]
 
         # update running total of lnP for AIC
         lnP += lnP_history[-1]
@@ -225,7 +232,9 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
     pi /= np.sum(pi)
     A /= A.sum(axis=1)[:,np.newaxis]
 
-    Xtest = np.asarray(Xtest).squeeze()
+    # convert list of holdout test observations to numpy array
+    for i in Xtest:
+        Xtest[i] = np.asarray(Xtest[i])
 
     # AIC calculation
     if covType == 'full':
@@ -236,21 +245,4 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
     k = (M*(D + numCovar) + M-1) * len(QLabels)
     AIC = 2*k - 2*lnP
 
-    return pi, A, B, QLabels, Xtest, ytest, AIC
-
-pi, A, B, labels, Xtest, ytest, AIC = learnHMM(M=2, addOne=True, features='tb', chordQuality='simple', rotateChroma=False, key=False, featureNorm='L1', covType='full', leaveOneOut=3, obsThresh=0)
-
-print "AIC: ", AIC
-
-# number of chords in ground truth
-N = A.shape[0]
-
-# fill the HMM with the learned parameters
-hmm = ghmm.GHMM(N, labels = labels, pi = pi, A = A, B = B)
-
-# pickle ghmm for future reference
-outP = open('trainedhmms/hmm_M=2_sig=full_quality=simple_rotate=0_key=0', 'w')
-
-pickle.dump(hmm, outP)
-
-outP.close()
+    return pi, A, B, QLabels, Xtest, Ytest, AIC
