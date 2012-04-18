@@ -362,8 +362,7 @@ class GMM:
             marginalizing over mixture components to get ln[p(Xi)]
         '''
         
-        lnP, _ = self._expect(X)
-        return lnP
+        return self._expect(X)[0]
 
     def calcDerivLnP(self, X):
         '''
@@ -380,10 +379,17 @@ class GMM:
         '''
 
         N, _ = X.shape
-        lnP_Xi_l = np.zeros([N, self.D, self.M])
+        Xi_l = np.zeros([N, self.D, self.M])
 
         # zero correction
         self._Sigma[self._Sigma == 0.0] += self._zeroCorr
+
+        if hasattr(slinalg, 'solve_triangular'):
+            # only in scipy since 0.9
+            solve_triangular = slinalg.solve_triangular
+        else:
+            # slower, but works
+            solve_triangular = slinalg.solve
 
         # for each mixture component
         for l in range(0,self.M):
@@ -392,8 +398,9 @@ class GMM:
 
             if self.covType == 'diag':
                 sig_l = np.diag(self._Sigma[l,:,:]) # (D,)
-                lnP_Xi_l[:,:,l] = (-0.5 * (self.D * np.log(2.0*np.pi) + np.sum((X_mu ** 2) / sig_l, axis=1) + np.sum(np.log(sig_l))) +
-                                  np.log(mu_X/sig_l))
+        
+                Xi_l[:,:,l] = (np.exp(-0.5 * (self.D * np.log(2.0*np.pi) + np.sum((X_mu ** 2) / sig_l, axis=1) + np.sum(np.log(sig_l)))[:,np.newaxis]) *
+                              (mu_X/sig_l))
             elif self.covType == 'full':
                 try:
                     # cholesky decomposition => U*U.T = _Sigma[l,:,:]
@@ -406,21 +413,21 @@ class GMM:
                     L = 1000.0 * self._Sigma[l,:,:]
                     
                 # solve LQ=X_mu
-                Q = slinalg.solve_triangular(L, X_mu.T, lower=True)
+                Q = solve_triangular(L, X_mu.T, lower=True)
 
                 # solve Lx=I for L^-1
-                invL = slinalg.solve_triangular(L, np.eye(self.D), lower=True)
+                invL = solve_triangular(L, np.eye(self.D), lower=True)
                 invSig = np.dot(invL.T, invL)
                 
                 lnP_Xi_l[:,:,l] = (-0.5 * (self.D * np.log(2.0 * np.pi) + 2.0 * np.sum(np.log(np.diag(L))) + np.sum(Q ** 2, axis=0))[:,np.newaxis] +
                                   np.log(np.dot(mu_X, invSig)))
 
-        lnP_Xi_l += self._lnw
+        Xi_l *= np.exp(self._lnw)
         
         # calculate sum of probabilities (marginalizing over mixtures)
-        lnP_deriv = logsumexp(lnP_Xi_l, axis=2)
+        derivP = np.sum(Xi_l, axis=2)
 
-        return lnP_deriv
+        return derivP
 
     def _processCov(self, Cov):
         ''' 
