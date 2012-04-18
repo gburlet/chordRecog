@@ -1,3 +1,6 @@
+import sys
+sys.path.insert(0, "..")
+
 from learnHMM import *
 import ghmm
 
