@@ -179,14 +179,14 @@ def trainNet(trainer, verbose = False):
         
     # l-bfgs-b
     #iprint = 1 if verbose else 0
-    #optArgs = {'bounds': None, 'm': 100, 'factr': 1e10, 'pgtol': 1e-02, 'iprint': iprint, 'maxfun': 2000}
+    #optArgs = {'bounds': None, 'm': 100, 'factr': 1e10, 'pgtol': 1e-02, 'iprint': iprint, 'maxfun': 300}
     #trainer.trainL_BFGS_B(**optArgs)
     
     # adaptive gradient descent
     #optArgs = {'etaInit': 0.95, 'etaInc': 1.1, 'etaDec': 0.65, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
     #trainer.trainAdaptGradDesc(**optArgs)
 
-    optArgs = {'eta': 0.01, 'sequential': True, 'maxiter': 1, 'convEps': 1e-5}
+    optArgs = {'eta': 0.1, 'sequential': True, 'maxiter': 1, 'convEps': 1e-5}
     trainer.trainGradDesc(**optArgs)
 
     #optArgs = {'etaInit': 0.9, 'sequential': True, 'maxiter': 1, 'convEps': 1e-2}
@@ -228,7 +228,7 @@ def process_dir(dir):
 
     return qtransFiles, chromaFiles
 
-net = mixlearnNNbuff(verbose = True, nnStruct = [256, 40, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'L1', numDataPass = 1)
+net = mixlearnNNbuff(verbose = True, nnStruct = [256, 1000, 500, 250, 24], deltaTrain = 1, errorFunc = 'KLDiv', chromaNorm = 'L1', constantQNorm = 'L1', numDataPass = 1)
 wstar = net.flattenWeights()
 
 # save optimal weights

@@ -2,6 +2,50 @@ import os
 import numpy as np
 from emission import *
 
+def tieStates(pi, A, B, labels, D = 11):
+    '''
+    Perform state tying on the chord transitions to form a negative binomial distribution duration model.
+    append chord state to state labels
+
+    PARAMETERS
+    ----------
+    pi: (1,N) initial state distribution
+    A: (N,N) state transition matrix
+    D: number of tied states
+    '''
+
+    N = A.shape[0]
+    ND = N*D
+
+    piTied = np.zeros([1,ND])
+    ATied = np.zeros([ND,ND])
+    BTied = []
+
+    for i in range(N):
+        # add to piTied
+        piTied[0,i*D] = pi[0,i]
+
+        # copy emission distribution pointers from B to BTied
+        BTied.extend([B[i]]*D)
+
+        # P(a_ii) + P(a_ij)
+        ATied[i*D:(i*D)+D,i*D:(i*D)+D] = (A[i,i] ** (1.0/D))*np.eye(D) + np.diag([1-(A[i,i]**(1.0/D))]*(D-1), 1)
+        
+        # transitions to first states of other chords
+        scale = (1 - (A[i,i] ** (1.0/D))) / (1 - A[i,i])
+        for j in range(N):
+            if j == i:
+                continue
+            ATied[(i+1)*D-1,j*D] = A[i,j] * scale
+
+    # update labels by appending state index
+    labelsTied = []
+    for q in labels:
+        for i in range(D):
+            labelsTied.append(q + '_' + str(i+1))
+
+    return piTied, ATied, BTied, labelsTied
+
 def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateChroma = False, key = False, featureNorm = 'L1', covType = 'full', holdOut = (-1,-1), obsThresh = 0):
     '''
     PARAMETERS
@@ -21,10 +65,15 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
     B {1xN}: emission distribution for each state
     '''
 
-    groundTruth = open('../data/gtruth_chroma.csv', 'r')
+    #groundTruth = open('../data/gtruth_chroma.csv', 'r')
     # 0, 1, 7, 10, 11, 12, 13
     # sid, timestamp, local.tonic.name, root.name, root.pc, quality, simple.quality, obs
     #  0,      1,            2,             3,        4,       5,          6,         7-
+
+    groundTruth = open('data/gtruth_chroma_enharmonic.csv', 'r')
+    # 0, 1, 7, 10, 11, 12
+    # sid, timestamp, local.tonic.pc, root.pc, quality, simple.quality, obs  
+    #  0,      1,            2,          3,       4,         5,          6-
 
     piDict = {}
     aDict = {}
@@ -47,29 +96,14 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
     for obsNum, obs in enumerate(groundTruth):        
         obs = obs.split(",")
         sid = int(obs[0])
-
-        # form chord name
-        if key:
-            if obs[2] == "NA":
-                continue
-            chordName = obs[2] + '.'
-        else:
-            chordName = ''
-
-        if chordQuality == 'full':
-            if obs[5] == "NA":
-                continue
-            else:
-                chordName += obs[3] + obs[5]
-        else:
-            if obs[6] == "NA":
-                chordName = "NA"
-            else:
-                chordName += obs[3] + obs[6]
-
-        # first timestamps in songs usually have no annotation
-        if chordName.strip() == "NANA":
-            continue
+        
+        '''
+        # for non-enharmonic dataset
+        tonic = obs[2]
+        root = obs[3]
+        rootPc = obs[4]
+        fQuality = obs[5]
+        sQuality = obs[6]
 
         if features == 't':
             chroma = np.asfarray(obs[7:19])
@@ -77,18 +111,53 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
             chroma = np.asfarray(obs[19:31])
         elif features == 'tb':
             chroma = np.asfarray(obs[7:31])
+        '''
+
+        # for enharmonic dataset
+        tonic = obs[2]
+        root = obs[3]
+        rootPc = root
+        fQuality = obs[4]
+        sQuality = obs[5]
+
+        if features == 't':
+            chroma = np.asfarray(obs[6:18])
+        elif features == 'b':
+            chroma = np.asfarray(obs[18:30])
+        elif features == 'tb':
+            chroma = np.asfarray(obs[6:30])
 
         # skip silence (really there are no chords in either the treble or bass)            
         if np.sum(chroma) == 0:
             continue
 
+        # form chord name
+        if key:
+            if tonic == "NA":
+                continue
+            chordName = tonic + '.'
+        else:
+            chordName = ''
+
+        if chordQuality == 'full':
+            chordName += root + fQuality
+        else:
+            if sQuality == "NA":
+                chordName = "NA"
+            else:
+                chordName += root + sQuality
+
+        # first timestamps in songs usually have no annotation
+        #if chordName.strip() == "NANA":
+        #    continue
+        
         if rotateChroma:
             # override chord name with quality
-            chordName = obs[6] if chordQuality == 'simple' else obs[5]
+            chordName = sQuality if chordQuality == 'simple' else fQuality
 
             # rotate chroma
             try:
-                pc = int(obs[4])
+                pc = int(rootPc)
             except ValueError:
                 # root.pc is NA
                 # nothing we can do here
@@ -206,7 +275,6 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
             for j, k in enumerate(QLabels):
                 if k in aDict[q]:
                     A[i,j] = aDict[q][k]
-                j += 1
         
         # fill B
         # convert to numpy array
@@ -214,13 +282,11 @@ def learnHMM(M, addOne = True, features = 'tb', chordQuality = 'simple', rotateC
         del bDict[q]
         print "learning emissions for chord: %s, index: %d, #obs: %d" % (q, i, Xtrain.shape[0])
         bGMM = GMM(M, D, covType, zeroCorr=1e-12)
-        lnP_history = bGMM.expectMax(Xtrain, maxIter=50, convEps=1e-6, verbose=True)
+        lnP_history = bGMM.expectMax(Xtrain, maxIter=150, convEps=1e-3, verbose=True)
         B.append(bGMM)
 
         # update running total of lnP for AIC
         lnP += lnP_history[-1]
-            
-        i += 1
 
     # add one to state transition probabilities before normalizing
     if addOne:

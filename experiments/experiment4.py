@@ -1,5 +1,5 @@
-# experiment 2
-# K-fold cross-validation
+# experiment 4 
+# average leave one out
 
 import sys
 sys.path.insert(0, "..")
@@ -10,7 +10,7 @@ import ghmm
 
 # PARAMETERS
 # ----------
-K = 5                   # number fold cross validation
+K = 5               # number of songs to leave out
 M = 7               # number of gaussian components in the emission distribution mixture
 covType = 'diag'    # covariance structure for emission distributions (diag or full)
 quality = 'full'    # chord quality: full or simple
@@ -22,13 +22,10 @@ addOne = True       # add one to pi and A before normalization
 tieStates = 11      # number of tied states (chord duration modeling)
 
 numSongs = 649
-hop = np.floor(numSongs/K)
 
-holdOuts = []
-for i in range(K-1):
-    holdOuts.append(((i*hop)+1, (i+1)*hop))
-
-holdOuts.append((holdOuts[-1][1]+1, numSongs))
+# holdOut songnumber range (low,high) inclusive (not song ID's but in order of appearance in data files)
+# choose random songs to holdout
+holdOut = [(s,s) for s in list(np.random.randint(1,numSongs+1,K))]
 
 holdOutAcc =  []
 for holdOut in holdOuts:
@@ -64,11 +61,11 @@ for holdOut in holdOuts:
 
     holdOutAcc.append(accs)
 
-# calculate average recognition accuracy over blocks
+# calculate average recognition accuracy over holdout songs
 acc = 0.0
-for block in holdOutAcc:
-    for song in block:
-        acc += block[song]
-acc /= numSongs
+for hold in holdOutAcc:
+    for song in hold:
+        acc += hold[song]
+acc /= len(holdOut)
 
 print "average accuracy: ", acc

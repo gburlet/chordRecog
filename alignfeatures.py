@@ -2,10 +2,11 @@ import neuralnet as nn
 import activation as act
 import numpy as np
 
-chordFile = open('data/table.txt', 'r')
+#chordFile = open('data/table.txt', 'r')
+chordFile = open('data/chordinonoenharmonic.txt', 'r')
 #featureFName = 'audio_vamp_nnls-chroma_nnls-chroma_logfreqspec.csv'
 featureFName = 'audio_vamp_nnls-chroma_nnls-chroma_bothchroma.csv'
-dataOut = open('data/gtruth_chroma_simple.csv', 'w')
+dataOut = open('data/gtruth_chroma_enharmonic.csv', 'w')
 
 '''
 nnStruct = [256,24]
@@ -38,7 +39,6 @@ for i, cLine in enumerate(chordFile):
 
     sid = gTruth[0]
     chordTime = gTruth[1]
-    #chordLabels = gTruth[2:]
 
     if sid != prevFeatureFileNum:
         # close previous feature file
@@ -50,17 +50,23 @@ for i, cLine in enumerate(chordFile):
         print "processing: ", featureFileName
         featureFile = open(featureFileName, 'r')
 
-    # 0,1,10,12/13
-    rootName = gTruth[10].strip()
-    simpleQuality = gTruth[13].strip()
-    # create chordname, use simple quality if available, else use full quality
-    #chordName = rootName + simpleQuality if simpleQuality != "NA" else rootName + gTruth[12].strip()
-
+    '''
+    for table.txt (enharmonicities enabled)
     # 0, 1, 7, 10, 11, 12, 13
+    # sid, timestamp, local.tonic.name, root.name, root.pc, quality, simple.quality
     outVec = gTruth[0:2]
     outVec.append(gTruth[7])
     outVec.extend(gTruth[10:14])
-    #outVec.append(chordName)
+    '''
+
+    '''
+    for chordinonoenharmonic.txt (enharmonicities disabled)
+    '''
+    # 0,1,7,10,11,12
+    # sid, timestamp, local.tonic.pc, root.pc, quality, simple.quality
+    outVec = gTruth[0:2]
+    outVec.append(gTruth[7])
+    outVec.extend(gTruth[10:13])
 
     # get features
     obsLine = featureFile.readline()

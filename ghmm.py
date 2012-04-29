@@ -66,7 +66,7 @@ class GHMM:
     labels = property(_getLabels, _setLabels)
 
     def _getPi(self):
-        return self._A
+        return self._pi
 
     def _setPi(self, thePi):
         if thePi.shape != (1,self.N):
@@ -319,16 +319,12 @@ class GHMM:
             lnDelta[t,:] = np.max(pTrans, axis=0) + lnP_obs[t,:]
             lnPsi[t,:] = np.argmax(pTrans, axis=0)
 
-        lnDelta[lnDelta <= -1e200] = -np.Inf
-
         # Step 3: termination
-        qstar_t = np.argmax(lnDelta[T-1,:])
-        pstar = lnDelta[T-1,qstar_t]
+        qstar = [np.argmax(lnDelta[T-1,:])]
+        pstar = lnDelta[T-1,qstar[-1]]
 
-        qstar = []
-        for t in reversed(range(T)):
-            qstar.append(qstar_t)
-            qstar_t = lnPsi[t,qstar_t]
+        for t in reversed(range(T-1)):
+            qstar.append(lnPsi[t+1,qstar[-1]])
 
         qstar.reverse()
 

@@ -29,7 +29,7 @@ def testNNFeature(getSong = 1, chromaNorm = 'L1', constantQNorm = 'L1'):
     net = nn.NeuralNet(nnStruct, actFunc=activations)
     
     # load in trained weights
-    wstar = np.load("trainedweights/wstar_grad_SSE_[0]_0.95_iter10.npy")
+    wstar = np.load("trainedweights/wstar_grad_KLDiv_[0]_0.75_100iter.npy")
     net.setWeights(wstar)
 
     # read constant-q transform preliminary features
@@ -107,3 +107,5 @@ def testNNFeature(getSong = 1, chromaNorm = 'L1', constantQNorm = 'L1'):
                 constantQ /= np.max(np.abs(constantQ))
 
         Xtrain.append(constantQ)
+
+#train, output, target = testNNFeature(getSong = 1, chromaNorm = 'L1', constantQNorm = 'L1')
